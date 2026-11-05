@@ -108,7 +108,7 @@ export function SubmissionForm({ accounts, checkedAt }: Props) {
               className="w-full rounded-md border border-zinc-300 px-3 py-2"
               maxLength={2048}
               name="videoUrl"
-              placeholder="Ссылка на видео, Short или Reel"
+              placeholder="Ссылка на TikTok, Short или Reel"
               required
               type="url"
             />
