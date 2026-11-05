@@ -73,19 +73,24 @@ model PlatformAccount {
 }
 
 model Submission {
-  id          String           @id @default(cuid())
-  userId      String
-  user        User             @relation(fields: [userId], references: [id])
-  accountId   String
-  account     PlatformAccount  @relation(fields: [accountId], references: [id])
-  videoUrl    String           @unique
-  publishedAt DateTime
-  views       Int              @default(0)
-  amountCents Int              @default(0)
-  weekStart   DateTime
-  status      SubmissionStatus @default(PENDING)
-  messages    Message[]
-  createdAt   DateTime         @default(now())
+  id           String           @id @default(cuid())
+  userId       String
+  user         User             @relation(fields: [userId], references: [id])
+  accountId    String
+  account      PlatformAccount  @relation(fields: [accountId], references: [id])
+  videoUrl     String           @unique
+  publishedAt  DateTime
+  views        Int              @default(0)
+  amountCents  Int              @default(0)
+  weekStart    DateTime
+  status       SubmissionStatus @default(PENDING)
+  rejectReason String?
+  reviewedAt   DateTime?
+  messages     Message[]
+  createdAt    DateTime         @default(now())
+
+  @@index([status, weekStart])
+  @@index([userId, weekStart])
 }
 
 model Message {

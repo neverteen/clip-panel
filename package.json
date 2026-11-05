@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:unit": "node --test tests/account-window.test.mjs"
+    "test:unit": "node --test tests/account-window.test.mjs tests/week.test.mjs tests/video-url.test.mjs tests/payout.test.mjs tests/now.test.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
