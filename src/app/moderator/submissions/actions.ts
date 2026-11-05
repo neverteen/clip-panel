@@ -13,6 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { calculateAmountCents } from "@/lib/payout";
 import { getWindow, moscowDateTimeToUtc } from "@/lib/week";
 import { lockSettlementWeek } from "@/lib/settlement-week";
+import { enqueueUserNotification } from "@/lib/telegram-notifications";
 
 export type ReviewActionState = {
   error?: string;
@@ -128,9 +129,13 @@ export async function reviewSubmissionAction(
             reviewedAt,
           },
         });
-        return updated.count === 0
-          ? { error: "Заявка уже обработана." }
-          : { message: "Заявка отклонена." };
+        if (updated.count === 0) return { error: "Заявка уже обработана." };
+        await enqueueUserNotification(tx, submission.userId, {
+          kind: "SUBMISSION_REJECTED",
+          reason: rejectReason?.data ?? "",
+          url: `/submissions/${submission.id}`,
+        }, `submission-rejected:${submission.id}`);
+        return { message: "Заявка отклонена." };
       }
 
       const checkedViews = viewsResult?.data;
@@ -164,9 +169,14 @@ export async function reviewSubmissionAction(
           reviewedAt,
         },
       });
-      return updated.count === 0
-        ? { error: "Заявка уже обработана." }
-        : { message: "Заявка одобрена. Начисление в копилку не выполнялось." };
+      if (updated.count === 0) return { error: "Заявка уже обработана." };
+      await enqueueUserNotification(tx, submission.userId, {
+        kind: "SUBMISSION_APPROVED",
+        views: checkedViews,
+        amountCents,
+        url: `/submissions/${submission.id}`,
+      }, `submission-approved:${submission.id}`);
+      return { message: "Заявка одобрена. Начисление в копилку не выполнялось." };
     });
 
     if (result.message) {

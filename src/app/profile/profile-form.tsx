@@ -1,13 +1,55 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { Button, Card, Input, PageHeader } from "@/components/ui";
-import { updatePayoutProfileAction, type ProfileActionState } from "./actions";
+import {
+  createTelegramLinkAction,
+  setTelegramNotificationsAction,
+  unlinkTelegramAction,
+  updatePayoutProfileAction,
+  type ProfileActionState,
+} from "./actions";
 
 const initialState: ProfileActionState = {};
 
-export function ProfileForm({ wallet, steamTradeUrl }: { wallet: string; steamTradeUrl: string }) {
+export function ProfileForm({
+  wallet,
+  steamTradeUrl,
+  telegramConnected,
+  telegramNotificationsEnabled,
+}: {
+  wallet: string;
+  steamTradeUrl: string;
+  telegramConnected: boolean;
+  telegramNotificationsEnabled: boolean;
+}) {
   const [state, action, pending] = useActionState(updatePayoutProfileAction, initialState);
+  const [telegramLink, setTelegramLink] = useState<string | null>(null);
+  const [telegramError, setTelegramError] = useState("");
+  const [telegramPending, startTelegramTransition] = useTransition();
+
+  function createLink() {
+    setTelegramError("");
+    startTelegramTransition(async () => {
+      const result = await createTelegramLinkAction();
+      setTelegramLink(result.link ?? null);
+      setTelegramError(result.error ?? "");
+    });
+  }
+
+  function unlink() {
+    setTelegramError("");
+    startTelegramTransition(async () => {
+      const result = await unlinkTelegramAction();
+      setTelegramLink(null);
+      setTelegramError(result.error ?? result.message ?? "");
+    });
+  }
+
+  async function saveTelegramNotifications(formData: FormData) {
+    await setTelegramNotificationsAction(formData);
+  }
+
   return (
     <Card className="space-y-5">
       <PageHeader title="Профиль и реквизиты" description="Реквизиты используются как снимок при создании заявки на вывод." />
@@ -27,6 +69,33 @@ export function ProfileForm({ wallet, steamTradeUrl }: { wallet: string; steamTr
         <Button disabled={pending} type="submit">{pending ? "Сохранение…" : "Сохранить реквизиты"}</Button>
         {(state.error || state.message) && <p className="text-sm" role={state.error ? "alert" : "status"}>{state.error ?? state.message}</p>}
       </form>
+      <section className="space-y-3 border-t border-[var(--border)] pt-5">
+        <h2 className="font-semibold">Telegram</h2>
+        <p className="text-sm text-[var(--muted-foreground)]">
+          {telegramConnected ? "Аккаунт привязан." : "Аккаунт не привязан."}
+        </p>
+        {telegramConnected ? (
+          <Button disabled={telegramPending} onClick={unlink} type="button">Отвязать Telegram</Button>
+        ) : (
+          <Button disabled={telegramPending} onClick={createLink} type="button">
+            {telegramPending ? "Создание ссылки…" : "Привязать Telegram"}
+          </Button>
+        )}
+        {telegramLink && (
+          <p className="break-all text-sm">
+            Ссылка действует 10 минут: <a className="underline" href={telegramLink} rel="noopener noreferrer" target="_blank">Открыть Telegram</a>
+          </p>
+        )}
+        {telegramError && <p className="text-sm" role="status">{telegramError}</p>}
+        <form action={saveTelegramNotifications}>
+          <input name="enabled" type="hidden" value="false" />
+          <label className="flex items-center gap-2 text-sm">
+            <input defaultChecked={telegramNotificationsEnabled} name="enabled" type="checkbox" value="true" />
+            Получать уведомления
+          </label>
+          <Button className="mt-2" type="submit">Сохранить настройку уведомлений</Button>
+        </form>
+      </section>
     </Card>
   );
 }

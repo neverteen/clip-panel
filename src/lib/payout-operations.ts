@@ -2,6 +2,7 @@ import { LedgerType, PayoutMethod, PayoutStatus, Prisma, Role } from "@prisma/cl
 import { PAYOUT_THRESHOLD_CENTS, MAX_PAYOUT_REQUESTS_PER_24H } from "./config.ts";
 import { balanceAfterRefund, balanceAfterReservation, validatePayoutRequest } from "./payout-rules.ts";
 import { parseSteamTradeUrl } from "./payout-profile.ts";
+import { enqueueModeratorNotifications, enqueueUserNotification } from "./telegram-notifications.ts";
 
 export type PayoutOperationErrorCode =
   | "user_not_found"
@@ -72,7 +73,7 @@ export async function createPayoutReservation(
   await lockUser(tx, userId);
   const user = await tx.user.findUnique({
     where: { id: userId },
-    select: { id: true, role: true, isActive: true, wallet: true, steamTradeUrl: true },
+    select: { id: true, login: true, role: true, isActive: true, wallet: true, steamTradeUrl: true },
   });
   if (!user?.isActive) throw new PayoutOperationError("inactive_user");
   if (user.role !== Role.CLIPPER) throw new PayoutOperationError("wrong_role");
@@ -123,6 +124,12 @@ export async function createPayoutReservation(
   if (balanceAfter < 0 || balanceAfter !== newBalance) {
     throw new PayoutOperationError("negative_balance");
   }
+  await enqueueModeratorNotifications(tx, {
+    kind: "NEW_PAYOUT",
+    login: user.login,
+    amountCents,
+    url: "/moderator/payouts",
+  }, `payout-created:${payout.id}`);
   return { payoutId: payout.id, amountCents, balanceAfterCents: balanceAfter };
 }
 
@@ -154,7 +161,7 @@ export async function decidePayout(
   if (!payout) throw new PayoutOperationError("not_found");
   if (payout.status !== PayoutStatus.REQUESTED) throw new PayoutOperationError("already_processed");
 
-  const owner = await tx.user.findUnique({ where: { id: payout.userId }, select: { isActive: true } });
+  const owner = await tx.user.findUnique({ where: { id: payout.userId }, select: { isActive: true, login: true } });
   if (!owner) throw new PayoutOperationError("not_found");
   if (!owner.isActive && !input.confirmInactive) {
     throw new PayoutOperationError("inactive_confirmation_required");
@@ -193,4 +200,17 @@ export async function decidePayout(
       throw new PayoutOperationError("negative_balance");
     }
   }
+
+  await enqueueUserNotification(tx, payout.userId, input.decision === "PAID"
+    ? {
+      kind: "PAYOUT_PAID",
+      amountCents: payout.amountCents,
+      url: "/balance",
+    }
+    : {
+      kind: "PAYOUT_REJECTED",
+      reason: input.rejectReason ?? "Вывод отклонён.",
+      amountCents: payout.amountCents,
+      url: "/balance",
+    }, `payout-decision:${payout.id}:${input.decision}`);
 }

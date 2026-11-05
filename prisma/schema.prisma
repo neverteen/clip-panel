@@ -48,25 +48,51 @@ enum PayoutStatus {
   REJECTED
 }
 
+enum NotificationStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+}
+
+enum NotificationKind {
+  NEW_SUBMISSION
+  NEW_ACCOUNT
+  NEW_PAYOUT
+  CHAT_MESSAGE
+  ACCOUNT_APPROVED
+  ACCOUNT_REJECTED
+  SUBMISSION_APPROVED
+  SUBMISSION_REJECTED
+  WEEK_CLOSED
+  PAYOUT_PAID
+  PAYOUT_REJECTED
+  TELEGRAM_LINKED
+  TELEGRAM_UNLINKED
+}
+
 model User {
-  id               String                @id @default(cuid())
-  login            String                @unique
-  password         String
-  role             Role                  @default(CLIPPER)
-  isActive         Boolean               @default(true)
-  wallet           String?
-  steamTradeUrl    String?
-  telegramChatId   String?
-  accounts         PlatformAccount[]
-  submissions      Submission[]
-  messages         Message[]
-  readStates       SubmissionReadState[]
-  ledger           LedgerEntry[]
-  payouts          Payout[]              @relation("PayoutOwner")
-  processedPayouts Payout[]              @relation("PayoutProcessor")
-  weekResults      WeekResult[]
-  closedWeeks      WeekClosure[]
-  createdAt        DateTime              @default(now())
+  id                           String                @id @default(cuid())
+  login                        String                @unique
+  password                     String
+  role                         Role                  @default(CLIPPER)
+  isActive                     Boolean               @default(true)
+  wallet                       String?
+  steamTradeUrl                String?
+  telegramChatId               String?               @unique
+  telegramNotificationsEnabled Boolean               @default(true)
+  accounts                     PlatformAccount[]
+  submissions                  Submission[]
+  messages                     Message[]
+  readStates                   SubmissionReadState[]
+  ledger                       LedgerEntry[]
+  payouts                      Payout[]              @relation("PayoutOwner")
+  processedPayouts             Payout[]              @relation("PayoutProcessor")
+  weekResults                  WeekResult[]
+  closedWeeks                  WeekClosure[]
+  telegramLinkCodes            TelegramLinkCode[]
+  notifications                Notification[]
+  createdAt                    DateTime              @default(now())
 }
 
 model LoginAttempt {
@@ -190,4 +216,55 @@ model WeekResult {
 
   @@unique([userId, weekStart])
   @@index([weekStart])
+}
+
+model TelegramLinkCode {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String    @unique
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  @@index([userId, createdAt])
+  @@index([expiresAt, usedAt])
+}
+
+model TelegramStartAttempt {
+  chatHash        String   @id
+  failedAttempts  Int      @default(0)
+  windowStartedAt DateTime
+  updatedAt       DateTime @updatedAt
+}
+
+model TelegramWorkerLease {
+  id         String   @id
+  workerId   String
+  leaseUntil DateTime
+  updatedAt  DateTime @updatedAt
+}
+
+model TelegramWorkerState {
+  id         String @id
+  nextOffset BigInt @default(0)
+}
+
+model Notification {
+  id              String             @id @default(cuid())
+  userId          String
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind            NotificationKind
+  text            String
+  status          NotificationStatus @default(PENDING)
+  attempts        Int                @default(0)
+  nextAttemptAt   DateTime           @default(now())
+  createdAt       DateTime           @default(now())
+  sentAt          DateTime?
+  dedupeKey       String?            @unique
+  leaseUntil      DateTime?
+  recipientChatId String?
+
+  @@index([status, nextAttemptAt, createdAt])
+  @@index([userId, kind, createdAt])
 }

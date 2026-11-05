@@ -9,6 +9,7 @@ import { getNow } from "@/lib/now";
 import { prisma } from "@/lib/prisma";
 import { getWindow, moscowDateTimeToUtc } from "@/lib/week";
 import { normalizeVideoUrl } from "@/lib/video-url";
+import { enqueueModeratorNotifications } from "@/lib/telegram-notifications";
 
 const submissionInputSchema = z.object({
   accountId: z.string().min(1, "Выберите аккаунт."),
@@ -62,7 +63,7 @@ export async function createSubmissionAction(
 
       const currentUser = await tx.user.findUnique({
         where: { id: owner.id },
-        select: { isActive: true, role: true },
+        select: { isActive: true, role: true, login: true },
       });
       if (!currentUser?.isActive || currentUser.role !== Role.CLIPPER) {
         return { error: "Доступ к аккаунту изменён. Войдите снова." };
@@ -109,7 +110,7 @@ export async function createSubmissionAction(
         return { error: `Достигнут лимит: не более ${MAX_SUBMISSIONS_PER_WEEK} заявок за неделю.` };
       }
 
-      await tx.submission.create({
+      const submission = await tx.submission.create({
         data: {
           userId: owner.id,
           accountId: account.id,
@@ -122,6 +123,11 @@ export async function createSubmissionAction(
         },
         select: { id: true },
       });
+      await enqueueModeratorNotifications(tx, {
+        kind: "NEW_SUBMISSION",
+        login: currentUser.login,
+        url: `/moderator/submissions/${submission.id}`,
+      }, `submission-created:${submission.id}`);
       return { message: "Заявка отправлена на проверку." };
     });
 

@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { getLastCompletedWeekStart, lockSettlementWeek } from "@/lib/settlement-week";
 import { WEEK_MS, getWindow } from "@/lib/week";
 import { computeWeekResults } from "@/lib/week-results";
+import { enqueueUserNotification } from "@/lib/telegram-notifications";
 
 export type CloseWeekState = { error?: string; message?: string };
 
@@ -100,6 +101,17 @@ export async function closeWeekAction(
             weekStart,
           }));
         if (accruals.length > 0) await tx.ledgerEntry.createMany({ data: accruals });
+
+        for (const row of computedResults) {
+          await enqueueUserNotification(tx, row.userId, {
+            kind: "WEEK_CLOSED",
+            payableCents: row.payableCents,
+            carryOutCents: row.carryOutCents,
+            expiredCents: row.expiredCents,
+            weekCents: row.weekCents,
+            url: "/balance",
+          }, `week-closed:${weekStart.toISOString()}:${row.userId}`);
+        }
       }
 
       return { message: "Неделя закрыта. Начисления и результаты сохранены." };

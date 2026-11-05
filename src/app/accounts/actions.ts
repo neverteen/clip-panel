@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireClipper, requireModerator } from "@/lib/auth-guards";
 import { getAccountWindow, getAccountWindowNow, isAccountWindowOpen } from "@/lib/account-window";
 import { prisma } from "@/lib/prisma";
+import { enqueueModeratorNotifications, enqueueUserNotification } from "@/lib/telegram-notifications";
 
 const PLATFORM_HOSTS = {
   TIKTOK: "tiktok.com",
@@ -144,7 +145,7 @@ export async function addPlatformAccountAction(
 
       const currentUser = await tx.user.findUnique({
         where: { id: owner.id },
-        select: { isActive: true, role: true },
+        select: { isActive: true, role: true, login: true },
       });
       if (!currentUser?.isActive || currentUser.role !== Role.CLIPPER) {
         return { error: "Доступ к аккаунту изменён. Войдите снова." };
@@ -190,10 +191,16 @@ export async function addPlatformAccountAction(
           data: { status: AccountStatus.PENDING },
         });
         if (reopened.count === 0) return { error: "Статус аккаунта уже изменён. Обновите страницу." };
+        await enqueueModeratorNotifications(tx, {
+          kind: "NEW_ACCOUNT",
+          login: currentUser.login,
+          platform: parsed.data.platform,
+          url: "/moderator/accounts",
+        }, `account-review:${existing.id}:${now.getTime()}`);
         return { message: "Повторная заявка отправлена на проверку." };
       }
 
-      await tx.platformAccount.create({
+      const createdAccount = await tx.platformAccount.create({
         data: {
           userId: owner.id,
           platform: parsed.data.platform,
@@ -202,6 +209,12 @@ export async function addPlatformAccountAction(
         },
         select: { id: true },
       });
+      await enqueueModeratorNotifications(tx, {
+        kind: "NEW_ACCOUNT",
+        login: currentUser.login,
+        platform: parsed.data.platform,
+        url: "/moderator/accounts",
+      }, `account-review:${createdAccount.id}`);
       return { message: "Аккаунт отправлен на проверку." };
     });
 
@@ -233,11 +246,26 @@ export async function decidePlatformAccountAction(
   });
   if (!input.success) return { error: "Некорректное решение." };
 
-  const updated = await prisma.platformAccount.updateMany({
-    where: { id: input.data.accountId, status: AccountStatus.PENDING },
-    data: { status: input.data.decision },
+  const result = await prisma.$transaction(async (tx) => {
+    const account = await tx.platformAccount.findUnique({
+      where: { id: input.data.accountId },
+      select: { id: true, userId: true, platform: true, status: true },
+    });
+    if (!account || account.status !== AccountStatus.PENDING) return false;
+    const updated = await tx.platformAccount.updateMany({
+      where: { id: account.id, status: AccountStatus.PENDING },
+      data: { status: input.data.decision },
+    });
+    if (updated.count === 0) return false;
+    const kind = input.data.decision === AccountStatus.APPROVED ? "ACCOUNT_APPROVED" : "ACCOUNT_REJECTED";
+    await enqueueUserNotification(tx, account.userId, {
+      kind,
+      platform: account.platform,
+      url: "/accounts",
+    }, `account-decision:${account.id}:${input.data.decision}`);
+    return true;
   });
-  if (updated.count === 0) return { error: "Аккаунт уже обработан." };
+  if (!result) return { error: "Аккаунт уже обработан." };
 
   revalidatePath("/moderator/accounts");
   revalidatePath("/accounts");

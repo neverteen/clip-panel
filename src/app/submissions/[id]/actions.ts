@@ -5,6 +5,8 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth-guards";
 import { canAccessSubmissionChat, getMessageRateLimitError } from "@/lib/chat-rules";
 import { prisma } from "@/lib/prisma";
+import { getNow } from "@/lib/now";
+import { enqueueChatMessageNotifications } from "@/lib/telegram-notifications";
 
 export type SendMessageState = {
   error?: string;
@@ -56,7 +58,7 @@ export async function sendMessageAction(
       currentViewer.isActive,
     )) return { error: "Заявка не найдена." } as const;
 
-    const now = new Date();
+    const now = getNow();
     const minuteCount = await tx.message.count({
       where: { authorId: currentViewer.id, createdAt: { gte: new Date(now.getTime() - 60_000) } },
     });
@@ -79,6 +81,13 @@ export async function sendMessageAction(
         authorId: true,
         author: { select: { login: true } },
       },
+    });
+    await enqueueChatMessageNotifications(tx, {
+      submissionId: submission.id,
+      authorId: currentViewer.id,
+      message: parsed.data.text,
+      createdAt: message.createdAt,
+      now,
     });
     return { message: { ...message, createdAt: message.createdAt.toISOString() } } as const;
   });
