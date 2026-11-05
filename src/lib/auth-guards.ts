@@ -21,3 +21,9 @@ export async function requireModerator() {
   if (user.role !== Role.MODERATOR) redirect("/");
   return user;
 }
+
+export async function requireClipper() {
+  const user = await requireUser();
+  if (user.role !== Role.CLIPPER) redirect("/");
+  return user;
+}
