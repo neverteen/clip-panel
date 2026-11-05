@@ -15,7 +15,7 @@
 ## Стек
 
 - Next.js (App Router, `src/`), TypeScript, Tailwind CSS
-- PostgreSQL 16 в Docker (`docker-compose.yml`, порт 5432)
+- PostgreSQL 16 в Docker (`docker-compose.yml`, порт 5433)
 - **Prisma 6** (`prisma@6`, `@prisma/client@6`). Генератор `prisma-client-js`. НЕ использовать Prisma 7, не создавать `prisma.config.ts`, не менять `generator` на `prisma-client`.
 - Авторизация: Auth.js (`next-auth@beta`), Credentials-провайдер, пароли через `bcryptjs`
 - Мутации через Server Actions
