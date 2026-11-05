@@ -51,6 +51,8 @@ model User {
   messages       Message[]
   readStates     SubmissionReadState[]
   ledger         LedgerEntry[]
+  weekResults    WeekResult[]
+  closedWeeks    WeekClosure[]
   createdAt      DateTime              @default(now())
 }
 
@@ -124,6 +126,31 @@ model LedgerEntry {
   type         LedgerType
   amountCents  Int
   submissionId String?    @unique
+  weekStart    DateTime?
   note         String?
   createdAt    DateTime   @default(now())
+}
+
+model WeekClosure {
+  id         String   @id @default(cuid())
+  weekStart  DateTime @unique
+  closedAt   DateTime @default(now())
+  closedById String
+  closedBy   User     @relation(fields: [closedById], references: [id])
+}
+
+model WeekResult {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  weekStart     DateTime
+  weekCents     Int
+  carryInCents  Int
+  payableCents  Int
+  carryOutCents Int
+  expiredCents  Int
+  createdAt     DateTime @default(now())
+
+  @@unique([userId, weekStart])
+  @@index([weekStart])
 }

@@ -12,6 +12,7 @@ import { getNow } from "@/lib/now";
 import { prisma } from "@/lib/prisma";
 import { calculateAmountCents } from "@/lib/payout";
 import { getWindow, moscowDateTimeToUtc } from "@/lib/week";
+import { lockSettlementWeek } from "@/lib/settlement-week";
 
 export type ReviewActionState = {
   error?: string;
@@ -84,11 +85,23 @@ export async function reviewSubmissionAction(
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      const initialSubmission = await tx.submission.findUnique({
+        where: { id: request.data.submissionId },
+        select: { id: true, weekStart: true },
+      });
+      if (!initialSubmission) return { error: "Заявка не найдена." };
+
+      await lockSettlementWeek(tx, initialSubmission.weekStart);
       const submission = await tx.submission.findUnique({
         where: { id: request.data.submissionId },
         select: { id: true, userId: true, status: true, weekStart: true },
       });
       if (!submission) return { error: "Заявка не найдена." };
+      const closure = await tx.weekClosure.findUnique({
+        where: { weekStart: submission.weekStart },
+        select: { id: true },
+      });
+      if (closure) return { error: "Эта неделя уже закрыта; решение по заявке невозможно." };
       if (submission.status !== SubmissionStatus.PENDING) {
         return { error: "Заявка уже обработана." };
       }
