@@ -94,6 +94,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         return {
           id: user.id,
+          login: user.login,
           email: null,
           name: user.login,
           role: user.role ?? Role.CLIPPER,

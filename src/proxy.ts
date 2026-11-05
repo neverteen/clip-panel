@@ -1,32 +1,36 @@
 import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 import { authConfig } from "../auth.config";
+import { protectedRouteRedirect, type UserRole } from "./lib/route-access";
 
 const { auth } = NextAuth(authConfig);
 
 export default auth((request) => {
-  if (request.nextUrl.pathname === "/" && request.auth?.user) {
-    const destination = request.auth.user.role === "MODERATOR" ? "/moderator/submissions" : "/accounts";
-    return NextResponse.redirect(new URL(destination, request.nextUrl));
-  }
-
-  if (!request.nextUrl.pathname.startsWith("/moderator")) {
+  const pathname = request.nextUrl.pathname;
+  if (pathname.startsWith("/api/")) {
+    if (!request.auth?.user?.id) {
+      return NextResponse.json({ error: "Требуется вход." }, {
+        status: 401,
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
     return NextResponse.next();
   }
 
-  if (!request.auth) {
-    const loginUrl = new URL("/login", request.nextUrl);
-    loginUrl.searchParams.set("callbackUrl", request.nextUrl.href);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  if (request.auth.user?.role !== "MODERATOR") {
-    return NextResponse.redirect(new URL("/", request.nextUrl));
+  const role = request.auth?.user?.role;
+  const validRole: UserRole | null = role === "CLIPPER" || role === "MODERATOR" ? role : null;
+  const destination = protectedRouteRedirect(pathname, validRole);
+  if (destination) {
+    const redirectUrl = new URL(destination, request.nextUrl);
+    if (!validRole) {
+      redirectUrl.searchParams.set("callbackUrl", `${pathname}${request.nextUrl.search}`);
+    }
+    return NextResponse.redirect(redirectUrl);
   }
 
   return NextResponse.next();
 });
 
 export const config = {
-  matcher: ["/", "/moderator/:path*"],
+  matcher: ["/((?!$|login(?:/|$)|api/auth|_next(?:/|$)|favicon.ico|robots.txt|.*\\.(?:avif|css|gif|ico|jpe?g|js|map|png|svg|ttf|txt|webp|woff2?)$).*)"],
 };

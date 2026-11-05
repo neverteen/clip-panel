@@ -1,15 +1,42 @@
-import Link from "next/link";
-import { Button, Card, PageHeader } from "@/components/ui";
+import type { Metadata } from "next";
+import { connection } from "next/server";
+import { auth } from "../../auth";
+import { LandingPage } from "@/components/landing-page";
+import { landingContent } from "@/content/landing";
+import { prisma } from "@/lib/prisma";
+import {
+  MAX_ACCOUNTS_PER_PLATFORM,
+  MAX_SUBMISSIONS_PER_WEEK,
+  MIN_VIDEO_VIEWS,
+  MIN_WEEK_VIEWS,
+  PAYOUT_THRESHOLD_CENTS,
+  RATE_CENTS_PER_1000,
+} from "@/lib/config";
+import { activeHomeDestination } from "@/lib/route-access";
 
-export default function Home() {
-  return <main className="mx-auto flex w-full max-w-5xl flex-1 items-center px-4 py-10 sm:px-6 sm:py-16">
-    <Card className="relative w-full overflow-hidden p-6 sm:p-10">
-      <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-20 size-64 rounded-full bg-accent/10 blur-3xl" />
-      <div className="relative max-w-2xl space-y-6">
-        <p className="font-heading text-sm font-semibold tracking-[0.22em] text-accent-2">CLOSETAPE CLIPS</p>
-        <PageHeader title="Панель клипмейкера" description="Добавляйте аккаунты, отправляйте ролики на проверку и следите за балансом в одном месте." />
-        <Link className="inline-flex" href="/login"><Button size="lg">Войти в панель</Button></Link>
-      </div>
-    </Card>
-  </main>;
+export const metadata: Metadata = landingContent.metadata;
+export const instant = false;
+
+export default async function HomePage() {
+  await connection();
+  const session = await auth();
+  const userId = session?.user?.id;
+  const activeUser = userId
+    ? await prisma.user.findUnique({ where: { id: userId }, select: { isActive: true } })
+    : null;
+  const login = session?.user?.login ?? null;
+  const dashboardHref = activeHomeDestination(session?.user?.role, activeUser?.isActive);
+
+  return <LandingPage
+    login={dashboardHref ? login : null}
+    dashboardHref={dashboardHref}
+    numbers={{
+      rateCentsPer1000: RATE_CENTS_PER_1000,
+      minVideoViews: MIN_VIDEO_VIEWS,
+      minWeekViews: MIN_WEEK_VIEWS,
+      payoutThresholdCents: PAYOUT_THRESHOLD_CENTS,
+      maxAccountsPerPlatform: MAX_ACCOUNTS_PER_PLATFORM,
+      maxSubmissionsPerWeek: MAX_SUBMISSIONS_PER_WEEK,
+    }}
+  />;
 }
