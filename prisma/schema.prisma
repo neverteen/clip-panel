@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CLIPPER
+  MODERATOR
+}
+
+enum Platform {
+  TIKTOK
+  YOUTUBE
+  INSTAGRAM
+}
+
+enum AccountStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum LedgerType {
+  ACCRUAL
+  PAYOUT
+  ADJUSTMENT
+}
+
+model User {
+  id             String            @id @default(cuid())
+  email          String            @unique
+  password       String
+  role           Role              @default(CLIPPER)
+  wallet         String?
+  steamTradeUrl  String?
+  telegramChatId String?
+  accounts       PlatformAccount[]
+  submissions    Submission[]
+  messages       Message[]
+  ledger         LedgerEntry[]
+  createdAt      DateTime          @default(now())
+}
+
+model PlatformAccount {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id])
+  platform    Platform
+  url         String
+  status      AccountStatus @default(PENDING)
+  submissions Submission[]
+
+  @@unique([platform, url])
+}
+
+model Submission {
+  id          String           @id @default(cuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id])
+  accountId   String
+  account     PlatformAccount  @relation(fields: [accountId], references: [id])
+  videoUrl    String           @unique
+  publishedAt DateTime
+  views       Int              @default(0)
+  amountCents Int              @default(0)
+  weekStart   DateTime
+  status      SubmissionStatus @default(PENDING)
+  messages    Message[]
+  createdAt   DateTime         @default(now())
+}
+
+model Message {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id])
+  authorId     String
+  author       User       @relation(fields: [authorId], references: [id])
+  text         String
+  createdAt    DateTime   @default(now())
+}
+
+model LedgerEntry {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  type         LedgerType
+  amountCents  Int
+  submissionId String?    @unique
+  note         String?
+  createdAt    DateTime   @default(now())
+}
