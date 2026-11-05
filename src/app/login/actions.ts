@@ -5,8 +5,8 @@ import { signIn } from "../../../auth";
 import { z } from "zod";
 
 const loginSchema = z.object({
-  email: z.string().trim().toLowerCase().email(),
-  password: z.string().min(8),
+  login: z.string().trim().toLowerCase().min(1).max(320),
+  password: z.string(),
 });
 
 export type LoginState = {
@@ -18,23 +18,27 @@ export async function loginAction(
   formData: FormData,
 ): Promise<LoginState> {
   const parsed = loginSchema.safeParse({
-    email: formData.get("email"),
+    login: formData.get("login"),
     password: formData.get("password"),
   });
 
-  if (!parsed.success) {
-    return { error: "Неверный email или пароль." };
-  }
+  if (!parsed.success) return { error: "Неверный логин или пароль." };
+
+  const passwordTooLong = Buffer.byteLength(parsed.data.password, "utf8") > 72;
 
   try {
     await signIn("credentials", {
-      email: parsed.data.email,
+      login: parsed.data.login,
       password: parsed.data.password,
       redirectTo: "/",
     });
   } catch (error) {
     if (error instanceof AuthError) {
-      return { error: "Неверный email или пароль." };
+      return {
+        error: passwordTooLong
+          ? "Пароль слишком длинный: максимум 72 байта в UTF-8."
+          : "Неверный логин или пароль.",
+      };
     }
     throw error;
   }

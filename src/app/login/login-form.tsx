@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useActionState } from "react";
 import { loginAction, type LoginState } from "./actions";
 
@@ -12,13 +11,13 @@ export function LoginForm() {
   return (
     <form action={action} className="mt-6 space-y-4">
       <label className="block space-y-1 text-sm">
-        <span>Электронная почта</span>
+        <span>Логин</span>
         <input
-          autoComplete="email"
+          autoComplete="username"
           className="w-full rounded-md border border-zinc-300 px-3 py-2"
-          name="email"
+          name="login"
           required
-          type="email"
+          type="text"
         />
       </label>
       <label className="block space-y-1 text-sm">
@@ -27,6 +26,7 @@ export function LoginForm() {
           autoComplete="current-password"
           className="w-full rounded-md border border-zinc-300 px-3 py-2"
           minLength={8}
+          maxLength={72}
           name="password"
           required
           type="password"
@@ -41,7 +41,7 @@ export function LoginForm() {
         {pending ? "Входим…" : "Войти"}
       </button>
       <p className="text-sm text-zinc-600">
-        Нет аккаунта? <Link className="underline" href="/register">Зарегистрироваться</Link>
+        Обратитесь к модератору, чтобы получить аккаунт.
       </p>
     </form>
   );
