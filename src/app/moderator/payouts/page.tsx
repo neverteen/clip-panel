@@ -1,5 +1,5 @@
 import { PayoutStatus } from "@prisma/client";
-import { Card, PageHeader, StatusBadge } from "@/components/ui";
+import { Button, Card, EmptyState, PageHeader, Select, StatusBadge } from "@/components/ui";
 import { requireModerator } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
 import { maskDestination } from "@/lib/payout-profile";
@@ -74,18 +74,18 @@ export default async function ModeratorPayoutsPage({
       <form action="/moderator/payouts" className="flex flex-wrap items-end gap-3" method="get">
         <label className="space-y-1 text-sm">
           <span className="block">Статус</span>
-          <select className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2" defaultValue={filter} name="status">
+          <Select className="min-w-40" defaultValue={filter} name="status">
             <option value="REQUESTED">Ожидают</option>
             <option value="PAID">Оплаченные</option>
             <option value="REJECTED">Отклонённые</option>
             <option value="ALL">Все</option>
-          </select>
+          </Select>
         </label>
-        <button className="rounded-md border border-[var(--border)] px-4 py-2" type="submit">Показать</button>
+        <Button variant="secondary" type="submit">Показать</Button>
       </form>
 
       {payouts.length === 0 ? (
-        <Card>Заявок для выбранного фильтра нет.</Card>
+        <EmptyState title="Заявок для выбранного фильтра нет" />
       ) : (
         <div className="space-y-4">
           {payouts.map((payout) => (
@@ -95,7 +95,7 @@ export default async function ModeratorPayoutsPage({
                 <StatusBadge status={statusLabels[payout.status]} />
               </div>
               {!payout.user.isActive && (
-                <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                <p className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
                   Пользователь отключён. Обработка потребует явного подтверждения.
                 </p>
               )}

@@ -1,36 +1,147 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8fafc;
-  --foreground: #171717;
-  --surface: #ffffff;
-  --border: #e4e4e7;
-  --muted: #f4f4f5;
-  --muted-foreground: #52525b;
-  --accent: #18181b;
+  color-scheme: dark;
+  --background: #0b0b12;
+  --surface: #14141f;
+  --surface-2: #1b1b2b;
+  --border: #24243a;
+  --foreground: #e8e8f2;
+  --muted: #9a9ab5;
+  --muted-foreground: #9a9ab5;
+  --accent: #8b5cf6;
+  --accent-2: #22d3ee;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-text: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-inter);
+  --font-heading: var(--font-space-grotesk);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    --surface: #18181b;
-    --border: #3f3f46;
-    --muted: #27272a;
-    --muted-foreground: #a1a1aa;
-    --accent: #2563eb;
-  }
+* {
+  border-color: var(--border);
+}
+
+html,
+body {
+  min-height: 100%;
+  background: var(--background);
+  color: var(--foreground);
 }
 
 body {
-  background: var(--background);
+  font-family: var(--font-inter), Arial, sans-serif;
+  overflow-x: clip;
+}
+
+h1,
+h2,
+h3,
+h4,
+.font-heading {
+  font-family: var(--font-space-grotesk), var(--font-inter), sans-serif;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+  color-scheme: dark;
+}
+
+button {
+  min-height: 44px;
+}
+
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  min-height: 44px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background-color: var(--surface);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  padding: 0.625rem 0.75rem;
+  font-size: 16px;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent);
+  min-width: 20px;
+  min-height: 20px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
+}
+
+.responsive-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+@media (max-width: 639px) {
+  .responsive-table,
+  .responsive-table tbody {
+    display: block;
+    min-width: 0 !important;
+  }
+
+  .responsive-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .responsive-table tr {
+    display: block;
+    margin: 0.75rem;
+    overflow-wrap: anywhere;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--surface);
+  }
+
+  .responsive-table td {
+    display: grid;
+    grid-template-columns: minmax(5.5rem, 0.42fr) minmax(0, 1fr);
+    gap: 0.75rem;
+    border-top: 1px solid var(--border);
+    padding: 0.75rem;
+  }
+
+  .responsive-table td:first-child {
+    border-top: 0;
+  }
+
+  .responsive-table td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
 }

@@ -1,6 +1,8 @@
 "use server";
 
 import { AccountStatus, Platform, Prisma, Role } from "@prisma/client";
+import { MAX_ACCOUNTS_PER_PLATFORM } from "@/lib/config";
+import { isAccountPlatformLimitReached } from "@/lib/account-limits";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireClipper, requireModerator } from "@/lib/auth-guards";
@@ -177,8 +179,8 @@ export async function addPlatformAccountAction(
           status: { in: [AccountStatus.PENDING, AccountStatus.APPROVED] },
         },
       });
-      if (used >= 3) {
-        return { error: "Достигнут лимит: максимум 3 аккаунта на платформу." };
+      if (isAccountPlatformLimitReached(used)) {
+        return { error: `Достигнут лимит: максимум ${MAX_ACCOUNTS_PER_PLATFORM} аккаунтов на платформу.` };
       }
 
       if (existing) {

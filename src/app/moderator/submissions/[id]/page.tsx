@@ -59,14 +59,14 @@ export default async function ModeratorSubmissionDetailPage({ params }: PageProp
           <h2 className="font-semibold">Проверка заявки</h2>
           <StatusBadge status={submission.status} />
         </div>
-        <a className="block break-all text-blue-700 underline" href={submission.videoUrl} rel="noopener noreferrer" target="_blank">
+        <a className="block break-all text-accent-2 underline-offset-4 hover:underline underline" href={submission.videoUrl} rel="noopener noreferrer" target="_blank">
           {submission.videoUrl}
         </a>
         <p className="text-sm text-[var(--muted-foreground)]">
           Опубликован: {dateMoscow(submission.publishedAt)} МСК · Просмотры: {submission.views.toLocaleString("ru-RU")} · Сумма: {amount(submission.amountCents)}
         </p>
-        {submission.rejectReason && <p className="whitespace-pre-wrap text-sm text-red-800">Причина отклонения: {submission.rejectReason}</p>}
-        {!submission.user.isActive && <p className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Пользователь отключён. Для решения требуется явное подтверждение.</p>}
+        {submission.rejectReason && <p className="whitespace-pre-wrap text-sm text-danger">Причина отклонения: {submission.rejectReason}</p>}
+        {!submission.user.isActive && <p className="rounded border border-warning/40 bg-warning/10 p-3 text-sm text-warning">Пользователь отключён. Для решения требуется явное подтверждение.</p>}
         {submission.status === "PENDING" && <ReviewForm isUserActive={submission.user.isActive} publishedAt={utcToMoscowDateTimeValue(submission.publishedAt)} submissionId={submission.id} />}
       </Card>
       <SubmissionChat

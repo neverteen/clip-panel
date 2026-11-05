@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import { Button, Card, Input, Select } from "@/components/ui";
 import { addPlatformAccountAction, type AccountActionState } from "./actions";
 
 type Props = {
@@ -48,14 +49,14 @@ export function AccountsForm({ checkedAt, opensAt, closesAt }: Props) {
   const countdownTarget = isOpen ? closesAt : opensAt;
 
   return (
-    <section className="space-y-4 rounded-lg border border-zinc-200 p-5">
+    <Card className="space-y-4">
       <h2 className="text-xl font-medium">Добавить аккаунт</h2>
       {isOpen ? (
-        <p className="text-sm text-green-800" role="status">
+        <p className="text-sm text-success" role="status">
           Окно открыто. До закрытия: {formatRemaining(countdownTarget - currentTime)}.
         </p>
       ) : (
-        <p className="text-sm text-amber-900" role="status">
+        <p className="text-sm text-warning" role="status">
           Добавлять аккаунты можно только во вторник с 00:00 до 22:00 МСК. Ближайшее открытие: {formatMoscowDate(opensAt)} МСК. До открытия: {formatRemaining(countdownTarget - currentTime)}.
         </p>
       )}
@@ -64,21 +65,19 @@ export function AccountsForm({ checkedAt, opensAt, closesAt }: Props) {
         <fieldset className="space-y-3" disabled={!isOpen || pending}>
           <label className="block space-y-1 text-sm">
             <span>Платформа</span>
-            <select
-              className="w-full rounded-md border border-zinc-300 px-3 py-2"
+            <Select
               defaultValue="TIKTOK"
               name="platform"
             >
               <option value="TIKTOK">TikTok</option>
               <option value="YOUTUBE">YouTube</option>
               <option value="INSTAGRAM">Instagram</option>
-            </select>
+            </Select>
           </label>
           <label className="block space-y-1 text-sm">
             <span>Ссылка на профиль или канал</span>
-            <input
+            <Input
               autoComplete="url"
-              className="w-full rounded-md border border-zinc-300 px-3 py-2"
               maxLength={2048}
               name="url"
               placeholder="https://www.tiktok.com/@username"
@@ -86,16 +85,11 @@ export function AccountsForm({ checkedAt, opensAt, closesAt }: Props) {
               type="url"
             />
           </label>
-          <button
-            className="rounded-md bg-zinc-900 px-4 py-2 font-medium text-white disabled:opacity-60"
-            type="submit"
-          >
-            {pending ? "Отправляем…" : "Отправить на проверку"}
-          </button>
+          <Button disabled={!isOpen || pending} loading={pending} type="submit">Отправить на проверку</Button>
         </fieldset>
-        {state.error && <p className="text-sm text-red-700" role="alert">{state.error}</p>}
-        {state.message && <p className="text-sm text-green-800" role="status">{state.message}</p>}
+        {state.error && <p className="text-sm text-danger" role="alert">{state.error}</p>}
+        {state.message && <p className="text-sm text-success" role="status">{state.message}</p>}
       </form>
-    </section>
+    </Card>
   );
 }

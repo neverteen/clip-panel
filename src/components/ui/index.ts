@@ -4,3 +4,6 @@ export { Textarea } from "./textarea";
 export { Card } from "./card";
 export { StatusBadge } from "./status-badge";
 export { PageHeader } from "./page-header";
+export { Select } from "./select";
+export { EmptyState } from "./empty-state";
+export { Tabs } from "./tabs";

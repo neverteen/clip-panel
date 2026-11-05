@@ -119,7 +119,7 @@ export default async function ModeratorWeeksPage({
             <p className="text-sm text-[var(--muted-foreground)]">Нет пользователей с заявками или копилкой. Неделя будет закрыта без результатов.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+              <table className="responsive-table w-full min-w-[900px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-[var(--border)]">
                     <th className="p-2">Логин</th><th className="p-2">Просмотры</th><th className="p-2">Итог недели</th>
@@ -130,14 +130,14 @@ export default async function ModeratorWeeksPage({
                 <tbody>
                   {preview.map((row) => (
                     <tr className="border-b border-[var(--border)]" key={row.userId}>
-                      <td className="p-2">{row.login}</td>
-                      <td className="p-2">{row.views.toLocaleString("ru-RU")}</td>
-                      <td className="p-2">{formatCents(row.weekCents)}</td>
-                      <td className="p-2">{formatCents(row.carryInCents)}</td>
-                      <td className="p-2">{resultLabel(row)}</td>
-                      <td className="p-2">{formatCents(row.payableCents)}</td>
-                      <td className="p-2">{formatCents(row.carryOutCents)}</td>
-                      <td className="p-2">{formatCents(row.expiredCents)}</td>
+                      <td className="p-2" data-label="Логин">{row.login}</td>
+                      <td className="p-2" data-label="Просмотры">{row.views.toLocaleString("ru-RU")}</td>
+                      <td className="p-2" data-label="Итог недели">{formatCents(row.weekCents)}</td>
+                      <td className="p-2" data-label="Копилка на входе">{formatCents(row.carryInCents)}</td>
+                      <td className="p-2" data-label="Результат">{resultLabel(row)}</td>
+                      <td className="p-2" data-label="К выводу">{formatCents(row.payableCents)}</td>
+                      <td className="p-2" data-label="Новая копилка">{formatCents(row.carryOutCents)}</td>
+                      <td className="p-2" data-label="Сгорит">{formatCents(row.expiredCents)}</td>
                     </tr>
                   ))}
                 </tbody>

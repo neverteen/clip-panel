@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { createSubmissionAction, type SubmissionActionState } from "./actions";
+import { Button, Card, Input, Select } from "@/components/ui";
 import { getWindow, utcToMoscowDateTimeValue, WEEK_MS } from "@/lib/week";
 
 type AccountOption = {
@@ -61,29 +62,29 @@ export function SubmissionForm({ accounts, checkedAt }: Props) {
     : displayStart - currentTime;
 
   return (
-    <section className="space-y-4 rounded-lg border border-zinc-200 p-5">
+    <Card className="space-y-4">
       <div>
         <h2 className="text-xl font-medium">Текущая неделя</h2>
-        <p className="mt-1 text-sm text-zinc-600">
+        <p className="mt-1 text-sm text-muted">
           {formatMoscowDate(displayStart)} — {formatMoscowDate(displayEnd)} МСК
         </p>
       </div>
 
       {isOpen ? (
-        <p className="text-sm text-green-800" role="status">
+        <p className="text-sm text-success" role="status">
           До закрытия окна (воскресенье 22:00 МСК): {formatCountdown(countdown)}.
         </p>
       ) : (
-        <p className="text-sm text-amber-900" role="status">
+        <p className="text-sm text-warning" role="status">
           Окно закрыто. Оно действует с понедельника 01:00 до воскресенья 22:00 МСК. До открытия следующего окна: {formatCountdown(countdown)}.
         </p>
       )}
-      <p className="text-sm text-zinc-600">
+      <p className="text-sm text-muted">
         Ролик, опубликованный вне этого окна, не засчитывается и не переносится на следующую неделю.
       </p>
 
       {accounts.length === 0 && (
-        <p className="text-sm text-zinc-600">
+        <p className="text-sm text-muted">
           Для подачи заявки нужен собственный аккаунт платформы со статусом «Одобрен».
         </p>
       )}
@@ -92,20 +93,19 @@ export function SubmissionForm({ accounts, checkedAt }: Props) {
         <fieldset className="space-y-3" disabled={!isOpen || accounts.length === 0 || pending}>
           <label className="block space-y-1 text-sm">
             <span>Одобренный аккаунт</span>
-            <select className="w-full rounded-md border border-zinc-300 px-3 py-2" name="accountId" required>
+            <Select name="accountId" required>
               <option value="">Выберите аккаунт</option>
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
                   {account.platform}: {account.url}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="block space-y-1 text-sm">
             <span>Ссылка на ролик</span>
-            <input
+            <Input
               autoComplete="url"
-              className="w-full rounded-md border border-zinc-300 px-3 py-2"
               maxLength={2048}
               name="videoUrl"
               placeholder="Ссылка на TikTok, Short или Reel"
@@ -115,24 +115,18 @@ export function SubmissionForm({ accounts, checkedAt }: Props) {
           </label>
           <label className="block space-y-1 text-sm">
             <span>Дата и время публикации (МСК)</span>
-            <input
-              className="w-full rounded-md border border-zinc-300 px-3 py-2"
+            <Input
               defaultValue={utcToMoscowDateTimeValue(new Date(checkedAt))}
               name="publishedAt"
               required
               type="datetime-local"
             />
           </label>
-          <button
-            className="rounded-md bg-zinc-900 px-4 py-2 font-medium text-white disabled:opacity-60"
-            type="submit"
-          >
-            {pending ? "Отправляем…" : "Подать заявку"}
-          </button>
+          <Button disabled={!isOpen || accounts.length === 0 || pending} loading={pending} type="submit">Подать заявку</Button>
         </fieldset>
-        {state.error && <p className="text-sm text-red-700" role="alert">{state.error}</p>}
-        {state.message && <p className="text-sm text-green-800" role="status">{state.message}</p>}
+        {state.error && <p className="text-sm text-danger" role="alert">{state.error}</p>}
+        {state.message && <p className="text-sm text-success" role="status">{state.message}</p>}
       </form>
-    </section>
+    </Card>
   );
 }

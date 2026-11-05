@@ -1,5 +1,8 @@
+import { Role } from "@prisma/client";
+import { ClipperShell, ModeratorShell } from "@/components/app-shell";
 import { Card } from "@/components/ui";
 import { requireUser } from "@/lib/auth-guards";
+import { getModeratorNavigationCounts } from "@/lib/navigation-counts";
 import { prisma } from "@/lib/prisma";
 import { getProfileSections } from "@/lib/profile-sections";
 import { ProfileForm } from "./profile-form";
@@ -16,8 +19,9 @@ export default async function ProfilePage() {
   const payoutProfile = sections.payoutDetails
     ? await prisma.user.findUnique({ where: { id: user.id }, select: { wallet: true, steamTradeUrl: true } })
     : null;
+  const moderatorCounts = user.role === Role.MODERATOR ? await getModeratorNavigationCounts(user) : null;
 
-  return (
+  const content = (
     <main className="mx-auto w-full max-w-3xl flex-1 space-y-5 px-6 py-10">
       <p className="text-sm text-[var(--muted-foreground)]">Профиль: {user.login}</p>
       <ProfileForm
@@ -34,4 +38,7 @@ export default async function ProfilePage() {
       )}
     </main>
   );
+  return user.role === Role.MODERATOR && moderatorCounts
+    ? <ModeratorShell counts={moderatorCounts} login={user.login}>{content}</ModeratorShell>
+    : <ClipperShell login={user.login}>{content}</ClipperShell>;
 }

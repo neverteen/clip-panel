@@ -12,7 +12,7 @@ export function PayoutDecisionForm({ payoutId, userIsActive }: { payoutId: strin
     <form action={action} className="space-y-3">
       <input name="payoutId" type="hidden" value={payoutId} />
       {!userIsActive && (
-        <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+        <div className="space-y-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
           <p>Пользователь отключён. Для обработки требуется явное подтверждение.</p>
           <label className="flex items-start gap-2">
             <input className="mt-1" name="confirmInactive" type="checkbox" value="true" />
@@ -30,7 +30,7 @@ export function PayoutDecisionForm({ payoutId, userIsActive }: { payoutId: strin
       </label>
       <div className="flex flex-wrap gap-2">
         <Button disabled={pending} name="decision" type="submit" value="PAID">Оплачено</Button>
-        <button className="rounded-md bg-red-700 px-4 py-2 font-medium text-white disabled:opacity-50" disabled={pending} name="decision" type="submit" value="REJECTED">Отклонить</button>
+        <Button variant="danger" disabled={pending} name="decision" type="submit" value="REJECTED">Отклонить</Button>
       </div>
       {(state.error || state.message) && <p className="text-sm" role={state.error ? "alert" : "status"}>{state.error ?? state.message}</p>}
     </form>

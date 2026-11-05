@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { Button, Input } from "@/components/ui";
 import { loginAction, type LoginState } from "./actions";
 
 const initialState: LoginState = {};
@@ -12,9 +13,8 @@ export function LoginForm() {
     <form action={action} className="mt-6 space-y-4">
       <label className="block space-y-1 text-sm">
         <span>Логин</span>
-        <input
+        <Input
           autoComplete="username"
-          className="w-full rounded-md border border-zinc-300 px-3 py-2"
           name="login"
           required
           type="text"
@@ -22,9 +22,8 @@ export function LoginForm() {
       </label>
       <label className="block space-y-1 text-sm">
         <span>Пароль</span>
-        <input
+        <Input
           autoComplete="current-password"
-          className="w-full rounded-md border border-zinc-300 px-3 py-2"
           minLength={8}
           maxLength={72}
           name="password"
@@ -32,15 +31,9 @@ export function LoginForm() {
           type="password"
         />
       </label>
-      {state.error && <p className="text-sm text-red-700" role="alert">{state.error}</p>}
-      <button
-        className="w-full rounded-md bg-zinc-900 px-4 py-2 font-medium text-white disabled:opacity-60"
-        disabled={pending}
-        type="submit"
-      >
-        {pending ? "Входим…" : "Войти"}
-      </button>
-      <p className="text-sm text-zinc-600">
+      {state.error && <p className="text-sm text-danger" role="alert">{state.error}</p>}
+      <Button className="w-full" disabled={pending} loading={pending} type="submit">Войти</Button>
+      <p className="text-sm text-muted">
         Обратитесь к модератору, чтобы получить аккаунт.
       </p>
     </form>

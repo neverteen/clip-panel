@@ -1,15 +1,24 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Viewport } from "next";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+const inter = localFont({
+  variable: "--font-inter",
+  src: [
+    { path: "./fonts/inter-400.woff", weight: "400", style: "normal" },
+    { path: "./fonts/inter-600.woff", weight: "600", style: "normal" },
+  ],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const spaceGrotesk = localFont({
+  variable: "--font-space-grotesk",
+  src: [
+    { path: "./fonts/space-grotesk-400.ttf", weight: "400", style: "normal" },
+    { path: "./fonts/space-grotesk-600.ttf", weight: "600", style: "normal" },
+  ],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -17,11 +26,16 @@ export const metadata: Metadata = {
   description: "Панель управления заявками на клипы.",
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="ru"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${spaceGrotesk.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

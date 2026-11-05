@@ -111,7 +111,7 @@ export function SubmissionChat({
         {items.map((item) => (
           <li
             className={item.system
-              ? "rounded-md bg-[var(--muted)] p-3 text-sm text-[var(--muted-foreground)]"
+              ? "rounded-md bg-surface-2 p-3 text-sm text-muted"
               : "rounded-md border border-[var(--border)] p-3"}
             key={item.system ? item.id : item.id}
           >
@@ -133,7 +133,7 @@ export function SubmissionChat({
         ))}
         {items.length === 0 && <li className="text-sm text-[var(--muted-foreground)]">Сообщений пока нет.</li>}
       </ol>
-      {pollError && <p className="text-sm text-red-700" role="status">{pollError}</p>}
+      {pollError && <p className="text-sm text-danger" role="status">{pollError}</p>}
       <form action={action} className="space-y-2">
         <input name="submissionId" type="hidden" value={submissionId} />
         <label className="block space-y-1 text-sm">
@@ -149,7 +149,7 @@ export function SubmissionChat({
         </label>
         <div className="flex flex-wrap items-center gap-3">
           <Button disabled={pending} type="submit">{pending ? "Отправка…" : "Отправить"}</Button>
-          <span className="text-sm text-red-700" role="alert">{state.error}</span>
+          <span className="text-sm text-danger" role="alert">{state.error}</span>
         </div>
       </form>
     </Card>

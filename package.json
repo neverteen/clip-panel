@@ -8,7 +8,7 @@
     "start": "next start",
     "worker": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/worker.ts",
     "lint": "eslint",
-    "test:unit": "node --test tests/account-window.test.mjs tests/week.test.mjs tests/video-url.test.mjs tests/payout.test.mjs tests/payout-rules.test.mjs tests/payout-profile.test.mjs tests/now.test.mjs tests/chat-rules.test.mjs tests/settlement.test.mjs tests/telegram-rules.test.mjs",
+    "test:unit": "node --test tests/account-window.test.mjs tests/account-limits.test.mjs tests/week.test.mjs tests/video-url.test.mjs tests/payout.test.mjs tests/payout-rules.test.mjs tests/payout-profile.test.mjs tests/now.test.mjs tests/chat-rules.test.mjs tests/settlement.test.mjs tests/telegram-rules.test.mjs",
     "test:integration": "node --env-file=.env --test tests/ledger-week-unique.integration.mjs tests/payouts.integration.test.mjs tests/telegram.integration.test.mjs"
   },
   "dependencies": {

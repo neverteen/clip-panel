@@ -54,14 +54,14 @@ export default async function ClipperSubmissionPage({ params }: PageProps<"/subm
           <h2 className="font-semibold">Заявка</h2>
           <StatusBadge status={submission.status} />
         </div>
-        <a className="block break-all text-blue-700 underline" href={submission.videoUrl} rel="noopener noreferrer" target="_blank">
+        <a className="block break-all text-accent-2 underline-offset-4 hover:underline underline" href={submission.videoUrl} rel="noopener noreferrer" target="_blank">
           {submission.videoUrl}
         </a>
         <p className="text-sm text-[var(--muted-foreground)]">
           Опубликован: {dateMoscow(submission.publishedAt)} МСК · Неделя с {dateMoscow(submission.weekStart)} МСК
         </p>
         <p>Просмотры: {submission.views.toLocaleString("ru-RU")} · Сумма: {amount(submission.amountCents)}</p>
-        {submission.rejectReason && <p className="whitespace-pre-wrap text-sm text-red-800">Причина отклонения: {submission.rejectReason}</p>}
+        {submission.rejectReason && <p className="whitespace-pre-wrap text-sm text-danger">Причина отклонения: {submission.rejectReason}</p>}
       </Card>
       <SubmissionChat
         initialEvents={makeSubmissionEvents(submission).map((event) => ({ ...event, createdAt: event.createdAt.toISOString() }))}

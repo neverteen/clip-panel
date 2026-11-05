@@ -136,7 +136,7 @@ export default async function BalancePage() {
               : `Для запроса вывода нужно не менее ${formatCents(PAYOUT_THRESHOLD_CENTS)} доступного баланса.`}
           </p>
         )}
-        <p className="text-sm"><a className="text-blue-700 underline" href="/profile">Управлять реквизитами</a></p>
+        <p className="text-sm"><a className="text-accent-2 underline-offset-4 hover:underline underline" href="/profile">Управлять реквизитами</a></p>
       </Card>
 
       <Card className="space-y-3">
@@ -182,17 +182,17 @@ export default async function BalancePage() {
           <p className="text-sm text-[var(--muted-foreground)]">Закрытых недель пока нет.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[700px] border-collapse text-left text-sm">
+            <table className="responsive-table w-full min-w-[700px] border-collapse text-left text-sm">
               <thead><tr className="border-b border-[var(--border)]"><th className="p-2">Неделя</th><th className="p-2">Итог</th><th className="p-2">Копилка на входе</th><th className="p-2">К выводу</th><th className="p-2">Копилка дальше</th><th className="p-2">Сгорело</th></tr></thead>
               <tbody>
                 {weekHistory.map((week) => (
                   <tr className="border-b border-[var(--border)]" key={week.weekStart.toISOString()}>
-                    <td className="p-2">{formatMoscow(week.weekStart)} МСК</td>
-                    <td className="p-2">{formatCents(week.weekCents)}</td>
-                    <td className="p-2">{formatCents(week.carryInCents)}</td>
-                    <td className="p-2">{formatCents(week.payableCents)}</td>
-                    <td className="p-2">{formatCents(week.carryOutCents)}</td>
-                    <td className="p-2">{formatCents(week.expiredCents)}</td>
+                    <td className="p-2" data-label="Неделя">{formatMoscow(week.weekStart)} МСК</td>
+                    <td className="p-2" data-label="Итог">{formatCents(week.weekCents)}</td>
+                    <td className="p-2" data-label="Копилка на входе">{formatCents(week.carryInCents)}</td>
+                    <td className="p-2" data-label="К выводу">{formatCents(week.payableCents)}</td>
+                    <td className="p-2" data-label="Копилка дальше">{formatCents(week.carryOutCents)}</td>
+                    <td className="p-2" data-label="Сгорело">{formatCents(week.expiredCents)}</td>
                   </tr>
                 ))}
               </tbody>

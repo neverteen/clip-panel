@@ -1,4 +1,6 @@
 import { AccountStatus, Platform } from "@prisma/client";
+import { Card, PageHeader, StatusBadge } from "@/components/ui";
+import { MAX_ACCOUNTS_PER_PLATFORM } from "@/lib/config";
 import { requireClipper } from "@/lib/auth-guards";
 import { getAccountWindow, getAccountWindowNow } from "@/lib/account-window";
 import { prisma } from "@/lib/prisma";
@@ -10,12 +12,6 @@ const platformNames: Record<Platform, string> = {
   TIKTOK: "TikTok",
   YOUTUBE: "YouTube",
   INSTAGRAM: "Instagram",
-};
-
-const statusNames: Record<AccountStatus, string> = {
-  PENDING: "На проверке",
-  APPROVED: "Одобрен",
-  REJECTED: "Отклонён",
 };
 
 export default async function AccountsPage() {
@@ -43,11 +39,8 @@ export default async function AccountsPage() {
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 space-y-8 px-6 py-10">
       <header>
-        <p className="text-sm text-zinc-600">Профиль: {user.login}</p>
-        <h1 className="mt-2 text-3xl font-semibold">Мои аккаунты</h1>
-        <p className="mt-2 text-zinc-600">
-          Добавлять можно до трёх аккаунтов каждой платформы. Отклонённые аккаунты в лимит не входят.
-        </p>
+        <p className="text-sm text-muted">Профиль: {user.login}</p>
+        <div className="mt-2"><PageHeader title="Мои аккаунты" description={`Добавлять можно до ${MAX_ACCOUNTS_PER_PLATFORM} аккаунтов каждой платформы. Отклонённые аккаунты в лимит не входят.`} /></div>
       </header>
 
       <AccountsForm
@@ -60,10 +53,10 @@ export default async function AccountsPage() {
         <h2 className="text-xl font-medium">Использованный лимит</h2>
         <div className="grid gap-3 sm:grid-cols-3">
           {Object.entries(usedByPlatform).map(([platform, used]) => (
-            <div className="rounded-lg border border-zinc-200 p-4" key={platform}>
+            <Card className="p-4" key={platform}>
               <p className="font-medium">{platformNames[platform as Platform]}</p>
-              <p className="mt-1 text-sm text-zinc-600">использовано {used} из 3</p>
-            </div>
+              <p className="mt-1 text-sm text-muted">использовано {used} из {MAX_ACCOUNTS_PER_PLATFORM}</p>
+            </Card>
           ))}
         </div>
       </section>
@@ -71,21 +64,19 @@ export default async function AccountsPage() {
       <section className="space-y-4">
         <h2 className="text-xl font-medium">Аккаунты</h2>
         {accounts.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-zinc-300 p-5 text-zinc-600">
+          <Card className="border-dashed p-5 text-muted">
             Пока аккаунтов нет.
-          </p>
+          </Card>
         ) : (
           <ul className="space-y-3">
             {accounts.map((account) => (
-              <li className="rounded-lg border border-zinc-200 p-4" key={account.id}>
+              <li className="rounded-lg border border-border p-4" key={account.id}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium">{platformNames[account.platform]}</span>
-                  <span className="rounded-full bg-zinc-100 px-3 py-1 text-sm">
-                    {statusNames[account.status]}
-                  </span>
+                  <StatusBadge status={account.status} />
                 </div>
                 <a
-                  className="mt-2 block break-all text-sm text-blue-700 underline"
+                  className="mt-2 block break-all text-sm text-accent-2 underline-offset-4 hover:underline underline"
                   href={account.url}
                   rel="noopener noreferrer"
                   target="_blank"

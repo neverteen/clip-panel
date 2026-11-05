@@ -57,7 +57,7 @@ export function ProfileForm({
       <PageHeader title="Профиль" description={showPayoutDetails ? "Настройки Telegram и реквизиты для вывода." : "Настройки Telegram."} />
       {showPayoutDetails && (
         <>
-          <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+          <p className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
             Проверьте реквизиты, выплата необратима.
           </p>
           <form action={action} className="space-y-4">

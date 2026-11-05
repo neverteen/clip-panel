@@ -5,6 +5,11 @@ import { authConfig } from "../auth.config";
 const { auth } = NextAuth(authConfig);
 
 export default auth((request) => {
+  if (request.nextUrl.pathname === "/" && request.auth?.user) {
+    const destination = request.auth.user.role === "MODERATOR" ? "/moderator/submissions" : "/accounts";
+    return NextResponse.redirect(new URL(destination, request.nextUrl));
+  }
+
   if (!request.nextUrl.pathname.startsWith("/moderator")) {
     return NextResponse.next();
   }
@@ -23,5 +28,5 @@ export default auth((request) => {
 });
 
 export const config = {
-  matcher: ["/moderator/:path*"],
+  matcher: ["/", "/moderator/:path*"],
 };
