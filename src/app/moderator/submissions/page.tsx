@@ -2,6 +2,7 @@ import { Platform, Prisma, SubmissionStatus } from "@prisma/client";
 import { MIN_VIDEO_VIEWS } from "@/lib/config";
 import { requireModerator } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
+import { getUnreadCounts } from "@/lib/submission-chat";
 import { utcToMoscowDateTimeValue } from "@/lib/week";
 import { ReviewForm } from "./review-form";
 
@@ -42,7 +43,7 @@ function formatCents(amountCents: number) {
 export default async function ModeratorSubmissionsPage({
   searchParams,
 }: PageProps<"/moderator/submissions">) {
-  await requireModerator();
+  const moderator = await requireModerator();
   const params = await searchParams;
   const rawStatus = Array.isArray(params.status) ? params.status[0] : params.status;
   const rawWeek = Array.isArray(params.week) ? params.week[0] : params.week;
@@ -74,6 +75,7 @@ export default async function ModeratorSubmissionsPage({
       account: { select: { platform: true } },
     },
   });
+  const unreadCounts = await getUnreadCounts(moderator.id, moderator.role);
 
   return (
     <main className="mx-auto w-full max-w-7xl flex-1 space-y-8 px-6 py-10">
@@ -128,6 +130,14 @@ export default async function ModeratorSubmissionsPage({
                   {statusNames[submission.status]}
                 </span>
               </div>
+              <a className="inline-flex items-center gap-2 text-sm font-medium text-blue-700 underline" href={`/moderator/submissions/${submission.id}`}>
+                Открыть заявку и чат
+                {(unreadCounts.get(submission.id) ?? 0) > 0 && (
+                  <span aria-label={`Непрочитанных сообщений: ${unreadCounts.get(submission.id)}`} className="rounded-full bg-red-100 px-2 py-0.5 text-red-800 no-underline">
+                    {unreadCounts.get(submission.id)} непрочитанных
+                  </span>
+                )}
+              </a>
               {!submission.user.isActive && (
                 <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
                   Пользователь отключён. Решение по заявке потребует явного подтверждения.

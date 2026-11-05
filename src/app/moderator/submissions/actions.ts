@@ -159,6 +159,8 @@ export async function reviewSubmissionAction(
     if (result.message) {
       revalidatePath("/moderator/submissions");
       revalidatePath("/submissions");
+      revalidatePath(`/moderator/submissions/${request.data.submissionId}`);
+      revalidatePath(`/submissions/${request.data.submissionId}`);
     }
     return result;
   } catch (error) {

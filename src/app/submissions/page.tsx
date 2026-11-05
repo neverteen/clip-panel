@@ -3,6 +3,7 @@ import { MIN_VIDEO_VIEWS } from "@/lib/config";
 import { requireClipper } from "@/lib/auth-guards";
 import { getNow } from "@/lib/now";
 import { prisma } from "@/lib/prisma";
+import { getUnreadCounts } from "@/lib/submission-chat";
 import { SubmissionForm } from "./submission-form";
 
 export const instant = false;
@@ -35,7 +36,7 @@ function formatCents(amountCents: number) {
 export default async function SubmissionsPage() {
   const user = await requireClipper();
   const now = getNow();
-  const [accounts, submissions] = await Promise.all([
+  const [accounts, submissions, unreadCounts] = await Promise.all([
     prisma.platformAccount.findMany({
       where: { userId: user.id, status: AccountStatus.APPROVED },
       orderBy: { platform: "asc" },
@@ -56,6 +57,7 @@ export default async function SubmissionsPage() {
         rejectReason: true,
       },
     }),
+    getUnreadCounts(user.id, user.role),
   ]);
 
   return (
@@ -107,6 +109,14 @@ export default async function SubmissionsPage() {
                 <p className="text-sm">
                   Просмотры: {submission.views.toLocaleString("ru-RU")} · Сумма: {formatCents(submission.amountCents)}
                 </p>
+                <a className="inline-flex items-center gap-2 text-sm font-medium text-blue-700 underline" href={`/submissions/${submission.id}`}>
+                  Открыть чат
+                  {(unreadCounts.get(submission.id) ?? 0) > 0 && (
+                    <span aria-label={`Непрочитанных сообщений: ${unreadCounts.get(submission.id)}`} className="rounded-full bg-red-100 px-2 py-0.5 text-red-800 no-underline">
+                      {unreadCounts.get(submission.id)} непрочитанных
+                    </span>
+                  )}
+                </a>
                 {submission.rejectReason && (
                   <p className="text-sm text-red-800">Причина отклонения: {submission.rejectReason}</p>
                 )}

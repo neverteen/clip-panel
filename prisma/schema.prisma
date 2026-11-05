@@ -38,19 +38,20 @@ enum LedgerType {
 }
 
 model User {
-  id             String            @id @default(cuid())
-  login          String            @unique
+  id             String                @id @default(cuid())
+  login          String                @unique
   password       String
-  role           Role              @default(CLIPPER)
-  isActive       Boolean           @default(true)
+  role           Role                  @default(CLIPPER)
+  isActive       Boolean               @default(true)
   wallet         String?
   steamTradeUrl  String?
   telegramChatId String?
   accounts       PlatformAccount[]
   submissions    Submission[]
   messages       Message[]
+  readStates     SubmissionReadState[]
   ledger         LedgerEntry[]
-  createdAt      DateTime          @default(now())
+  createdAt      DateTime              @default(now())
 }
 
 model LoginAttempt {
@@ -73,21 +74,22 @@ model PlatformAccount {
 }
 
 model Submission {
-  id           String           @id @default(cuid())
+  id           String                @id @default(cuid())
   userId       String
-  user         User             @relation(fields: [userId], references: [id])
+  user         User                  @relation(fields: [userId], references: [id])
   accountId    String
-  account      PlatformAccount  @relation(fields: [accountId], references: [id])
-  videoUrl     String           @unique
+  account      PlatformAccount       @relation(fields: [accountId], references: [id])
+  videoUrl     String                @unique
   publishedAt  DateTime
-  views        Int              @default(0)
-  amountCents  Int              @default(0)
+  views        Int                   @default(0)
+  amountCents  Int                   @default(0)
   weekStart    DateTime
-  status       SubmissionStatus @default(PENDING)
+  status       SubmissionStatus      @default(PENDING)
   rejectReason String?
   reviewedAt   DateTime?
   messages     Message[]
-  createdAt    DateTime         @default(now())
+  readStates   SubmissionReadState[]
+  createdAt    DateTime              @default(now())
 
   @@index([status, weekStart])
   @@index([userId, weekStart])
@@ -101,6 +103,18 @@ model Message {
   author       User       @relation(fields: [authorId], references: [id])
   text         String
   createdAt    DateTime   @default(now())
+
+  @@index([submissionId, createdAt, id])
+}
+
+model SubmissionReadState {
+  userId       String
+  submissionId String
+  lastReadAt   DateTime
+  user         User       @relation(fields: [userId], references: [id])
+  submission   Submission @relation(fields: [submissionId], references: [id])
+
+  @@id([userId, submissionId])
 }
 
 model LedgerEntry {
