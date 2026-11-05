@@ -37,23 +37,36 @@ enum LedgerType {
   ADJUSTMENT
 }
 
+enum PayoutMethod {
+  CRYPTO
+  SKINS
+}
+
+enum PayoutStatus {
+  REQUESTED
+  PAID
+  REJECTED
+}
+
 model User {
-  id             String                @id @default(cuid())
-  login          String                @unique
-  password       String
-  role           Role                  @default(CLIPPER)
-  isActive       Boolean               @default(true)
-  wallet         String?
-  steamTradeUrl  String?
-  telegramChatId String?
-  accounts       PlatformAccount[]
-  submissions    Submission[]
-  messages       Message[]
-  readStates     SubmissionReadState[]
-  ledger         LedgerEntry[]
-  weekResults    WeekResult[]
-  closedWeeks    WeekClosure[]
-  createdAt      DateTime              @default(now())
+  id               String                @id @default(cuid())
+  login            String                @unique
+  password         String
+  role             Role                  @default(CLIPPER)
+  isActive         Boolean               @default(true)
+  wallet           String?
+  steamTradeUrl    String?
+  telegramChatId   String?
+  accounts         PlatformAccount[]
+  submissions      Submission[]
+  messages         Message[]
+  readStates       SubmissionReadState[]
+  ledger           LedgerEntry[]
+  payouts          Payout[]              @relation("PayoutOwner")
+  processedPayouts Payout[]              @relation("PayoutProcessor")
+  weekResults      WeekResult[]
+  closedWeeks      WeekClosure[]
+  createdAt        DateTime              @default(now())
 }
 
 model LoginAttempt {
@@ -127,8 +140,32 @@ model LedgerEntry {
   amountCents  Int
   submissionId String?    @unique
   weekStart    DateTime?
+  payoutId     String?
+  payout       Payout?    @relation(fields: [payoutId], references: [id], onDelete: Restrict)
   note         String?
   createdAt    DateTime   @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model Payout {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation("PayoutOwner", fields: [userId], references: [id])
+  amountCents   Int
+  method        PayoutMethod
+  destination   String
+  status        PayoutStatus  @default(REQUESTED)
+  createdAt     DateTime      @default(now())
+  processedAt   DateTime?
+  processedById String?
+  processedBy   User?         @relation("PayoutProcessor", fields: [processedById], references: [id], onDelete: Restrict)
+  txRef         String?
+  rejectReason  String?
+  ledgerEntries LedgerEntry[]
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
 }
 
 model WeekClosure {

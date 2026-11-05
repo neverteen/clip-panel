@@ -4,6 +4,8 @@ import { getNow } from "@/lib/now";
 import { prisma } from "@/lib/prisma";
 import { getWindow, WEEK_MS } from "@/lib/week";
 import { computeWeekResults } from "@/lib/week-results";
+import { PAYOUT_THRESHOLD_CENTS, MAX_PAYOUT_REQUESTS_PER_24H } from "@/lib/config";
+import { PayoutRequestForm } from "./payout-request-form";
 
 export const instant = false;
 
@@ -31,7 +33,7 @@ export default async function BalancePage() {
   const now = getNow();
   const currentWeekStart = getWindow(now).start;
 
-  const [ledgerBalance, weekPreviewRows, pendingCount, latestClosure, weekHistory, ledgerEntries] = await Promise.all([
+  const [ledgerBalance, weekPreviewRows, pendingCount, latestClosure, weekHistory, ledgerEntries, profile, openPayout, recentPayoutCount, payoutHistory] = await Promise.all([
     prisma.ledgerEntry.aggregate({
       where: { userId: user.id },
       _sum: { amountCents: true },
@@ -55,6 +57,20 @@ export default async function BalancePage() {
       where: { userId: user.id },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       select: { id: true, type: true, amountCents: true, weekStart: true, note: true, createdAt: true },
+    }),
+    prisma.user.findUnique({ where: { id: user.id }, select: { wallet: true, steamTradeUrl: true } }),
+    prisma.payout.findFirst({
+      where: { userId: user.id, status: "REQUESTED" },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, amountCents: true, method: true, createdAt: true },
+    }),
+    prisma.payout.count({
+      where: { userId: user.id, createdAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) } },
+    }),
+    prisma.payout.findMany({
+      where: { userId: user.id },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: { id: true, amountCents: true, method: true, status: true, createdAt: true, processedAt: true, txRef: true, rejectReason: true },
     }),
   ]);
 
@@ -106,6 +122,42 @@ export default async function BalancePage() {
           )}
         </Card>
       </section>
+
+      <Card className="space-y-4">
+        <h2 className="text-lg font-semibold">Вывод средств</h2>
+        {openPayout ? (
+          <p className="text-sm">Заявка на вывод {formatCents(openPayout.amountCents)} ожидает обработки. Реквизиты заблокированы до решения модератора.</p>
+        ) : availableCents >= PAYOUT_THRESHOLD_CENTS && recentPayoutCount < MAX_PAYOUT_REQUESTS_PER_24H ? (
+          <PayoutRequestForm hasCrypto={Boolean(profile?.wallet?.trim())} hasSkins={Boolean(profile?.steamTradeUrl?.trim())} />
+        ) : (
+          <p className="text-sm text-[var(--muted-foreground)]">
+            {recentPayoutCount >= MAX_PAYOUT_REQUESTS_PER_24H
+              ? "Достигнут лимит: не более 3 заявок за последние 24 часа."
+              : `Для запроса вывода нужно не менее ${formatCents(PAYOUT_THRESHOLD_CENTS)} доступного баланса.`}
+          </p>
+        )}
+        <p className="text-sm"><a className="text-blue-700 underline" href="/profile">Управлять реквизитами</a></p>
+      </Card>
+
+      <Card className="space-y-3">
+        <h2 className="text-lg font-semibold">История выводов</h2>
+        {payoutHistory.length === 0 ? (
+          <p className="text-sm text-[var(--muted-foreground)]">Заявок на вывод пока нет.</p>
+        ) : (
+          <ul className="divide-y divide-[var(--border)]">
+            {payoutHistory.map((payout) => (
+              <li className="space-y-1 py-3" key={payout.id}>
+                <p className="font-medium">
+                  {formatCents(payout.amountCents)} · {payout.method === "CRYPTO" ? "Криптовалюта" : "Скины CS"} · {payout.status === "REQUESTED" ? "Ожидает" : payout.status === "PAID" ? "Оплачено" : "Отклонено"}
+                </p>
+                <p className="text-sm text-[var(--muted-foreground)]">Создана: {formatMoscow(payout.createdAt)} МСК</p>
+                {payout.status === "PAID" && payout.txRef && <p className="whitespace-pre-wrap break-words text-sm">Подтверждение выплаты: {payout.txRef}</p>}
+                {payout.status === "REJECTED" && payout.rejectReason && <p className="whitespace-pre-wrap break-words text-sm">Причина отклонения: {payout.rejectReason}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       <Card className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
