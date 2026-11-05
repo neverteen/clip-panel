@@ -1,29 +1,37 @@
 import { Card } from "@/components/ui";
-import { requireClipper } from "@/lib/auth-guards";
+import { requireUser } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
+import { getProfileSections } from "@/lib/profile-sections";
 import { ProfileForm } from "./profile-form";
 
 export const instant = false;
 
 export default async function ProfilePage() {
-  const user = await requireClipper();
+  const user = await requireUser();
+  const sections = getProfileSections(user.role);
   const profile = await prisma.user.findUnique({
     where: { id: user.id },
-    select: { wallet: true, steamTradeUrl: true, telegramChatId: true, telegramNotificationsEnabled: true },
+    select: { telegramChatId: true, telegramNotificationsEnabled: true },
   });
+  const payoutProfile = sections.payoutDetails
+    ? await prisma.user.findUnique({ where: { id: user.id }, select: { wallet: true, steamTradeUrl: true } })
+    : null;
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 space-y-5 px-6 py-10">
       <p className="text-sm text-[var(--muted-foreground)]">Профиль: {user.login}</p>
       <ProfileForm
-        wallet={profile?.wallet ?? ""}
-        steamTradeUrl={profile?.steamTradeUrl ?? ""}
+        showPayoutDetails={sections.payoutDetails}
+        wallet={payoutProfile?.wallet ?? ""}
+        steamTradeUrl={payoutProfile?.steamTradeUrl ?? ""}
         telegramConnected={Boolean(profile?.telegramChatId)}
         telegramNotificationsEnabled={profile?.telegramNotificationsEnabled ?? true}
       />
-      <Card className="text-sm text-[var(--muted-foreground)]">
-        Токен в Steam-ссылке даёт доступ к обмену. Не передавайте эту ссылку другим людям.
-      </Card>
+      {sections.payoutDetails && (
+        <Card className="text-sm text-[var(--muted-foreground)]">
+          Токен в Steam-ссылке даёт доступ к обмену. Не передавайте эту ссылку другим людям.
+        </Card>
+      )}
     </main>
   );
 }

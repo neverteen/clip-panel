@@ -4,6 +4,7 @@ import { prisma } from "./prisma.ts";
 import { callTelegramApi, getTelegramConfig } from "./telegram-api.ts";
 import { consumeTelegramStart, isUniqueChatConflict, recordTelegramStartFailure } from "./telegram-link.ts";
 import { deliveryFailureOutcome } from "./notification-rules.ts";
+import { NOTIFICATION_POLL_MS } from "./config.ts";
 
 const LEASE_ID = "telegram-get-updates";
 const LEASE_MS = 30_000;
@@ -157,34 +158,45 @@ async function processUpdates(token: string, updates: TelegramUpdate[], signal: 
 async function claimNotifications() {
   return prisma.$transaction(async (tx) => {
     const now = new Date();
-    await tx.notification.updateMany({
-      where: { status: NotificationStatus.SENDING, leaseUntil: { lte: now }, attempts: { gte: MAX_ATTEMPTS } },
-      data: { status: NotificationStatus.FAILED, leaseUntil: null },
-    });
-    await tx.notification.updateMany({
-      where: { status: NotificationStatus.SENDING, leaseUntil: { lte: now }, attempts: { lt: MAX_ATTEMPTS } },
-      data: { status: NotificationStatus.PENDING, leaseUntil: null },
-    });
-    return tx.$queryRaw<ClaimedNotification[]>`
-      WITH candidates AS (
-        SELECT "id"
-        FROM "Notification"
-        WHERE "attempts" < ${MAX_ATTEMPTS}
-          AND "status" = 'PENDING'::"NotificationStatus"
-          AND "nextAttemptAt" <= ${now}
-        ORDER BY "nextAttemptAt", "createdAt"
-        LIMIT ${OUTBOX_BATCH_SIZE}
-        FOR UPDATE SKIP LOCKED
-      )
-      UPDATE "Notification" AS notification
-      SET "status" = 'SENDING'::"NotificationStatus",
-          "attempts" = notification."attempts" + 1,
-          "leaseUntil" = ${new Date(now.getTime() + OUTBOX_LEASE_MS)}
-      FROM candidates
-      WHERE notification."id" = candidates."id"
-      RETURNING notification."id", notification."userId", notification."kind", notification."text", notification."attempts", notification."recipientChatId"
+    const candidates = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT "id" FROM "Notification"
+      WHERE "attempts" < ${MAX_ATTEMPTS}
+        AND "status" = 'PENDING'::"NotificationStatus"
+        AND "nextAttemptAt" <= ${now}
+      ORDER BY "nextAttemptAt", "createdAt"
+      LIMIT ${OUTBOX_BATCH_SIZE}
+      FOR UPDATE SKIP LOCKED
     `;
+    if (candidates.length === 0) return [];
+
+    const ids = candidates.map(({ id }) => id);
+    await tx.notification.updateMany({
+      where: { id: { in: ids }, status: NotificationStatus.PENDING, attempts: { lt: MAX_ATTEMPTS } },
+      data: {
+        status: NotificationStatus.SENDING,
+        attempts: { increment: 1 },
+        leaseUntil: new Date(now.getTime() + OUTBOX_LEASE_MS),
+        sentAt: null,
+      },
+    });
+    return tx.notification.findMany({
+      where: { id: { in: ids }, status: NotificationStatus.SENDING },
+      select: { id: true, userId: true, kind: true, text: true, attempts: true, recipientChatId: true },
+      orderBy: [{ nextAttemptAt: "asc" }, { createdAt: "asc" }],
+    });
   });
+}
+
+async function recoverExpiredNotifications() {
+  const now = new Date();
+  await prisma.$executeRaw`
+    UPDATE "Notification"
+    SET "status" = CASE WHEN "attempts" >= ${MAX_ATTEMPTS}
+      THEN 'FAILED'::"NotificationStatus" ELSE 'PENDING'::"NotificationStatus" END,
+        "leaseUntil" = NULL,
+        "sentAt" = NULL
+    WHERE "status" = 'SENDING'::"NotificationStatus" AND "leaseUntil" <= ${now}
+  `;
 }
 
 async function updateNotificationResult(
@@ -260,20 +272,21 @@ export async function runTelegramWorker() {
   let stopping = false;
   let leaseLost = false;
   let lastCleanupAt = 0;
+  let lastRecoveryAt = 0;
   const pollAbort = new AbortController();
+  const loseLease = () => {
+    leaseLost = true;
+    pollAbort.abort();
+    console.error("Telegram worker lease lost; exiting.");
+  };
   let heartbeatPromise = Promise.resolve();
   const heartbeat = setInterval(() => {
     heartbeatPromise = heartbeatPromise.then(async () => {
       if (stopping || leaseLost) return;
       try {
-        if (!await extendLease(workerId)) {
-          leaseLost = true;
-          pollAbort.abort();
-          console.error("Telegram worker lease lost; exiting.");
-        }
+        if (!await extendLease(workerId)) loseLease();
       } catch {
-        leaseLost = true;
-        pollAbort.abort();
+        loseLease();
         console.error("Telegram worker lease renewal failed; exiting.");
       }
     });
@@ -285,52 +298,78 @@ export async function runTelegramWorker() {
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
 
-  try {
+  const outboxLoop = async () => {
     while (!stopping && !leaseLost) {
-      if (!await extendLease(workerId)) {
-        leaseLost = true;
-        pollAbort.abort();
-        console.error("Telegram worker lease lost; exiting.");
-        break;
+      const nowMs = Date.now();
+      if (nowMs - lastRecoveryAt >= OUTBOX_LEASE_MS) {
+        try {
+          await recoverExpiredNotifications();
+          lastRecoveryAt = nowMs;
+        } catch {
+          console.warn("Telegram lease recovery failed.");
+        }
       }
-      if (Date.now() - lastCleanupAt >= 24 * 60 * 60_000) {
+      if (nowMs - lastCleanupAt >= 24 * 60 * 60_000) {
         try {
           await cleanOldNotifications();
-          lastCleanupAt = Date.now();
+          lastCleanupAt = nowMs;
         } catch {
           console.warn("Telegram cleanup failed.");
         }
       }
 
-      const claimed = await claimNotifications();
-      for (const notification of claimed) {
-        if (stopping || leaseLost) break;
-        try {
-          await deliverNotification(config.token, notification, pollAbort.signal);
-        } catch {
-          if (!leaseLost && !stopping) {
-            await updateNotificationResult(notification, deliveryFailureOutcome(notification.attempts));
-            console.warn("Telegram delivery processing failed", { kind: notification.kind, attempt: notification.attempts });
-          }
+      try {
+        const claimed = await claimNotifications();
+        if (claimed.length === 0) {
+          await sleep(NOTIFICATION_POLL_MS);
+          continue;
         }
-        await sleep(50);
+        for (const notification of claimed) {
+          if (stopping || leaseLost) break;
+          try {
+            await deliverNotification(config.token, notification, pollAbort.signal);
+          } catch {
+            if (!leaseLost && !stopping) {
+              await updateNotificationResult(notification, deliveryFailureOutcome(notification.attempts));
+              console.warn("Telegram delivery processing failed", { kind: notification.kind, attempt: notification.attempts });
+            }
+          }
+          await sleep(50);
+        }
+      } catch {
+        if (!stopping && !leaseLost) console.warn("Telegram outbox polling failed.");
+        await sleep(NOTIFICATION_POLL_MS);
       }
-      if (stopping || leaseLost) break;
+    }
+  };
 
+  const updatesLoop = async () => {
+    while (!stopping && !leaseLost) {
+      if (!await extendLease(workerId)) {
+        loseLease();
+        break;
+      }
       const state = await ensureWorkerState();
       const offset = Number(state.nextOffset);
       if (!Number.isSafeInteger(offset) || offset < 0) throw new Error("invalid_telegram_offset");
       if (!await extendLease(workerId)) {
-        leaseLost = true;
-        pollAbort.abort();
-        console.error("Telegram worker lease lost; exiting.");
+        loseLease();
         break;
       }
-      const updates = await callTelegramApi<TelegramUpdate[]>(config.token, "getUpdates", {
-        offset,
-        timeout: 30,
-        allowed_updates: ["message"],
-      }, fetch, pollAbort.signal, 35_000);
+      let updates;
+      try {
+        updates = await callTelegramApi<TelegramUpdate[]>(config.token, "getUpdates", {
+          offset,
+          timeout: 30,
+          allowed_updates: ["message"],
+        }, fetch, pollAbort.signal, 35_000);
+      } catch {
+        if (!stopping && !leaseLost) {
+          console.warn("Telegram getUpdates request failed.");
+          await sleep(1000);
+        }
+        continue;
+      }
       if (stopping || leaseLost) break;
       if (!updates.ok) {
         console.warn("Telegram getUpdates failed", { status: updates.status });
@@ -344,6 +383,10 @@ export async function runTelegramWorker() {
         await sleep(1000);
       }
     }
+  };
+
+  try {
+    await Promise.all([updatesLoop(), outboxLoop()]);
   } finally {
     clearInterval(heartbeat);
     stop();

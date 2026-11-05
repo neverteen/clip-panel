@@ -5,6 +5,7 @@ import { PrismaClient } from "@prisma/client";
 import { createTelegramLinkCode, consumeTelegramStart, TelegramLinkError } from "../src/lib/telegram-link.ts";
 import { enqueueUserNotification } from "../src/lib/telegram-notifications.ts";
 import { createTelegramLinkSecret, hashTelegramLinkSecret } from "../src/lib/telegram-rules.ts";
+import { getProfileSections } from "../src/lib/profile-sections.ts";
 
 const prisma = new PrismaClient();
 const rollbackMarker = (error) => error?.message === "rollback_test_data";
@@ -80,6 +81,29 @@ test("Telegram linking refuses a chat already owned by another user and caps cod
   }), rollbackMarker);
   assert.equal(await prisma.user.count({ where: { login: { startsWith: "tg_owner_" } } }), 0);
   assert.equal(await prisma.user.count({ where: { login: { startsWith: "tg_guest_" } } }), 0);
+});
+
+test("moderators can link Telegram from their own profile and do not receive payout details", async () => {
+  const loginPrefix = "tg_moderator_profile_";
+  let testUserId = "";
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: { login: newLogin(loginPrefix.slice(0, -1)), password: "integration-test-only", role: "MODERATOR" },
+      select: { id: true, role: true },
+    });
+    testUserId = user.id;
+
+    const sections = getProfileSections(user.role);
+    assert.deepEqual(sections, { payoutDetails: false, telegram: true });
+
+    const issued = await createTelegramLinkCode(tx, user.id, new Date());
+    const linked = await consumeTelegramStart(tx, { chatId: "715000001", secret: issued.secret, now: new Date() });
+    assert.equal(linked.linkedUserId, user.id);
+    assert.equal((await tx.user.findUnique({ where: { id: user.id }, select: { telegramChatId: true } }))?.telegramChatId, "715000001");
+    throw new Error("rollback_test_data");
+  }), rollbackMarker);
+  assert.equal(await prisma.user.count({ where: { id: testUserId } }), 0);
+  assert.equal(await prisma.telegramLinkCode.count({ where: { userId: testUserId } }), 0);
 });
 
 test("outbox deduplicates and excludes disabled or unlinked users; aborted business transaction leaves no notification", async () => {

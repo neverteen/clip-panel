@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireClipper } from "@/lib/auth-guards";
+import { requireClipper, requireUser } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
 import { PayoutOperationError, updatePayoutDetails } from "@/lib/payout-operations";
 import { parseSteamTradeUrl } from "@/lib/payout-profile";
@@ -59,7 +59,7 @@ function telegramError(code: string) {
 }
 
 export async function createTelegramLinkAction(): Promise<TelegramLinkActionState> {
-  const user = await requireClipper();
+  const user = await requireUser();
   const config = getTelegramConfig();
   if (!config) return { error: "Telegram-бот пока не настроен." };
 
@@ -75,7 +75,7 @@ export async function createTelegramLinkAction(): Promise<TelegramLinkActionStat
 }
 
 export async function unlinkTelegramAction(): Promise<ProfileActionState> {
-  const user = await requireClipper();
+  const user = await requireUser();
   try {
     const wasLinked = await prisma.$transaction((tx) => unlinkTelegram(tx, user.id, getNow()));
     revalidatePath("/profile");
@@ -87,7 +87,7 @@ export async function unlinkTelegramAction(): Promise<ProfileActionState> {
 }
 
 export async function setTelegramNotificationsAction(formData: FormData): Promise<ProfileActionState> {
-  const user = await requireClipper();
+  const user = await requireUser();
   const enabled = formData.getAll("enabled").includes("true");
   try {
     await prisma.$transaction(async (tx) => {
@@ -95,7 +95,8 @@ export async function setTelegramNotificationsAction(formData: FormData): Promis
         SELECT "id" FROM "User" WHERE "id" = ${user.id} FOR UPDATE
       `;
       const current = await tx.user.findUnique({ where: { id: user.id }, select: { isActive: true, role: true } });
-      if (!current?.isActive || current.role !== "CLIPPER") throw new TelegramLinkError("inactive");
+      if (!current?.isActive) throw new TelegramLinkError("inactive");
+      if (current.role !== "CLIPPER" && current.role !== "MODERATOR") throw new TelegramLinkError("wrong_role");
       await tx.user.update({
         where: { id: user.id },
         data: { telegramNotificationsEnabled: enabled },

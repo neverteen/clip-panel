@@ -23,7 +23,7 @@ export async function createTelegramLinkCode(tx: Tx, userId: string, now: Date) 
   if (locked.length === 0) throw new TelegramLinkError("user_not_found");
   const user = await tx.user.findUnique({ where: { id: userId }, select: { isActive: true, role: true } });
   if (!user?.isActive) throw new TelegramLinkError("inactive");
-  if (user.role !== Role.CLIPPER) throw new TelegramLinkError("wrong_role");
+  if (user.role !== Role.CLIPPER && user.role !== Role.MODERATOR) throw new TelegramLinkError("wrong_role");
 
   const since = new Date(now.getTime() - 24 * 60 * 60_000);
   const issued = await tx.telegramLinkCode.count({ where: { userId, createdAt: { gte: since } } });
@@ -141,7 +141,7 @@ export async function unlinkTelegram(tx: Tx, userId: string, now: Date) {
     select: { id: true, isActive: true, role: true, telegramChatId: true },
   });
   if (!user?.isActive) throw new TelegramLinkError("inactive");
-  if (user.role !== Role.CLIPPER) throw new TelegramLinkError("wrong_role");
+  if (user.role !== Role.CLIPPER && user.role !== Role.MODERATOR) throw new TelegramLinkError("wrong_role");
   if (!user.telegramChatId) return false;
   await tx.user.update({ where: { id: userId }, data: { telegramChatId: null }, select: { id: true } });
   await tx.telegramLinkCode.updateMany({ where: { userId, usedAt: null }, data: { usedAt: now } });
