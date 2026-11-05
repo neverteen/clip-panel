@@ -13,6 +13,7 @@ export const RATE_CENTS_PER_1000 = readPositiveInteger("RATE_CENTS_PER_1000", 20
 export const MIN_VIDEO_VIEWS = readPositiveInteger("MIN_VIDEO_VIEWS", 2000);
 export const MIN_WEEK_VIEWS = readPositiveInteger("MIN_WEEK_VIEWS", 5000);
 export const PAYOUT_THRESHOLD_CENTS = readPositiveInteger("PAYOUT_THRESHOLD_CENTS", 3000);
+export const PAYOUT_SLA_DAYS = 14;
 export const MAX_SUBMISSIONS_PER_WEEK = readPositiveInteger("MAX_SUBMISSIONS_PER_WEEK", 100);
 export const MAX_ACCOUNTS_PER_PLATFORM = 5;
 export const MAX_PAYOUT_REQUESTS_PER_24H = 3;
