@@ -1,6 +1,6 @@
 "use server";
 
-import { Prisma, SubmissionStatus } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
@@ -8,12 +8,9 @@ import {
   MIN_VIDEO_VIEWS,
 } from "@/lib/config";
 import { requireModerator } from "@/lib/auth-guards";
-import { getNow } from "@/lib/now";
 import { prisma } from "@/lib/prisma";
-import { calculateAmountCents } from "@/lib/payout";
-import { getWindow, moscowDateTimeToUtc } from "@/lib/week";
-import { lockSettlementWeek } from "@/lib/settlement-week";
-import { enqueueUserNotification } from "@/lib/telegram-notifications";
+import { reviewSubmissionInTransaction } from "@/lib/submission-review";
+import { moscowDateTimeToUtc } from "@/lib/week";
 
 export type ReviewActionState = {
   error?: string;
@@ -85,99 +82,14 @@ export async function reviewSubmissionAction(
   }
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      const initialSubmission = await tx.submission.findUnique({
-        where: { id: request.data.submissionId },
-        select: { id: true, weekStart: true },
-      });
-      if (!initialSubmission) return { error: "Заявка не найдена." };
-
-      await lockSettlementWeek(tx, initialSubmission.weekStart);
-      const submission = await tx.submission.findUnique({
-        where: { id: request.data.submissionId },
-        select: { id: true, userId: true, status: true, weekStart: true },
-      });
-      if (!submission) return { error: "Заявка не найдена." };
-      const closure = await tx.weekClosure.findUnique({
-        where: { weekStart: submission.weekStart },
-        select: { id: true },
-      });
-      if (closure) return { error: "Эта неделя уже закрыта; решение по заявке невозможно." };
-      if (submission.status !== SubmissionStatus.PENDING) {
-        return { error: "Заявка уже обработана." };
-      }
-
-      await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT "id" FROM "User" WHERE "id" = ${submission.userId} FOR UPDATE
-      `;
-      const clipper = await tx.user.findUnique({
-        where: { id: submission.userId },
-        select: { isActive: true },
-      });
-      if (!clipper) return { error: "Пользователь не найден." };
-      if (!clipper.isActive && request.data.confirmInactive !== "true") {
-        return { error: "Пользователь отключён. Подтвердите решение явно." };
-      }
-
-      const reviewedAt = getNow();
-      if (request.data.decision === "REJECT") {
-        const updated = await tx.submission.updateMany({
-          where: { id: submission.id, status: SubmissionStatus.PENDING },
-          data: {
-            status: SubmissionStatus.REJECTED,
-            rejectReason: rejectReason?.data,
-            reviewedAt,
-          },
-        });
-        if (updated.count === 0) return { error: "Заявка уже обработана." };
-        await enqueueUserNotification(tx, submission.userId, {
-          kind: "SUBMISSION_REJECTED",
-          reason: rejectReason?.data ?? "",
-          url: `/submissions/${submission.id}`,
-        }, `submission-rejected:${submission.id}`);
-        return { message: "Заявка отклонена." };
-      }
-
-      const checkedViews = viewsResult?.data;
-      if (checkedViews === undefined || !publishedAt) {
-        return { error: "Не удалось проверить просмотры или дату публикации." };
-      }
-      const submissionWindow = getWindow(publishedAt);
-      if (
-        submissionWindow.start.getTime() !== submission.weekStart.getTime() ||
-        publishedAt.getTime() < submission.weekStart.getTime() ||
-        publishedAt.getTime() >= submissionWindow.end.getTime()
-      ) {
-        return { error: "Исправленная дата публикации должна оставаться внутри недели заявки." };
-      }
-      if (publishedAt.getTime() > reviewedAt.getTime()) {
-        return { error: "Дата публикации не может быть в будущем." };
-      }
-
-      const amountCents = calculateAmountCents(checkedViews);
-      if (amountCents === null) {
-        return { error: `Для одобрения нужно не менее ${MIN_VIDEO_VIEWS.toLocaleString("ru-RU")} просмотров.` };
-      }
-
-      const updated = await tx.submission.updateMany({
-        where: { id: submission.id, status: SubmissionStatus.PENDING },
-        data: {
-          status: SubmissionStatus.APPROVED,
-          views: checkedViews,
-          publishedAt,
-          amountCents,
-          reviewedAt,
-        },
-      });
-      if (updated.count === 0) return { error: "Заявка уже обработана." };
-      await enqueueUserNotification(tx, submission.userId, {
-        kind: "SUBMISSION_APPROVED",
-        views: checkedViews,
-        amountCents,
-        url: `/submissions/${submission.id}`,
-      }, `submission-approved:${submission.id}`);
-      return { message: "Заявка одобрена. Начисление в копилку не выполнялось." };
-    });
+    const result = await prisma.$transaction((tx) => reviewSubmissionInTransaction(tx, {
+      submissionId: request.data.submissionId,
+      decision: request.data.decision,
+      views: viewsResult?.data,
+      publishedAt: publishedAt ?? undefined,
+      rejectReason: rejectReason?.data,
+      confirmInactive: request.data.confirmInactive === "true",
+    }));
 
     if (result.message) {
       revalidatePath("/moderator/submissions");

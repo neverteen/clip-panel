@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { getWindow, WEEK_MS } from "@/lib/week";
+import { getWindow, WEEK_MS } from "./week.ts";
 
 export function getLastCompletedWeekStart(now: Date) {
   const current = getWindow(now);
@@ -13,7 +13,7 @@ export async function lockSettlementWeek(
   weekStart: Date,
 ) {
   const lockName = `week-closure:${weekStart.toISOString()}`;
-  await tx.$queryRaw<Array<{ pg_advisory_xact_lock: null }>>`
+  await tx.$executeRaw`
     SELECT pg_advisory_xact_lock(hashtextextended(${lockName}, 0))
   `;
 }

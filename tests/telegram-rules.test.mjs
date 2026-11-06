@@ -65,14 +65,14 @@ test("Telegram API errors never expose the request URL or bot token", async () =
   const result = await callTelegramApi(syntheticToken, "getUpdates", {}, async (url) => {
     throw new Error(String(url));
   });
-  assert.deepEqual(result, { ok: false, status: 0 });
+  assert.deepEqual(result, { ok: false, status: 0, failureCode: "NETWORK" });
   assert.doesNotMatch(JSON.stringify(result), new RegExp(syntheticToken));
 
   const rateLimited = await callTelegramApi(syntheticToken, "sendMessage", { text: "test" }, async () => new Response(
     JSON.stringify({ ok: false, error_code: 429, parameters: { retry_after: 7 } }),
     { status: 429, headers: { "content-type": "application/json" } },
   ));
-  assert.deepEqual(rateLimited, { ok: false, status: 429, retryAfterSeconds: 7 });
+  assert.deepEqual(rateLimited, { ok: false, status: 429, failureCode: "HTTP_429", retryAfterSeconds: 7 });
 
   const delivered = await callTelegramApi(syntheticToken, "sendMessage", { text: "test" }, async () => new Response(
     JSON.stringify({ ok: true, result: { message_id: 1 } }),

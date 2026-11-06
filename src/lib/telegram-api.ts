@@ -1,6 +1,11 @@
 export type TelegramApiResult<T> =
   | { ok: true; result: T }
-  | { ok: false; status: number; retryAfterSeconds?: number };
+  | {
+      ok: false;
+      status: number;
+      failureCode: "HTTP_429" | "HTTP_403" | "HTTP_400" | "HTTP_5XX" | "TIMEOUT" | "NETWORK" | "INVALID_CHAT";
+      retryAfterSeconds?: number;
+    };
 
 type TelegramEnvelope<T> = {
   ok?: boolean;
@@ -29,19 +34,41 @@ export async function callTelegramApi<T>(
       cache: "no-store",
     });
   } catch {
-    return { ok: false, status: 0 };
+    return { ok: false, status: 0, failureCode: timeout.aborted ? "TIMEOUT" : "NETWORK" };
   }
 
   let payload: TelegramEnvelope<T>;
   try {
     payload = await response.json() as TelegramEnvelope<T>;
   } catch {
-    return { ok: false, status: response.status };
+    const failureCode = response.status === 429
+      ? "HTTP_429"
+      : response.status === 403
+        ? "HTTP_403"
+        : response.status >= 500
+          ? "HTTP_5XX"
+          : "HTTP_400";
+    return { ok: false, status: response.status, failureCode };
   }
   if (response.ok && payload.ok === true) return { ok: true, result: payload.result as T };
+  const description = typeof (payload as TelegramEnvelope<T> & { description?: unknown }).description === "string"
+    ? (payload as TelegramEnvelope<T> & { description: string }).description.toLowerCase()
+    : "";
+  const failureCode = payload.error_code === 403
+    ? "HTTP_403"
+    : payload.error_code === 429
+      ? "HTTP_429"
+      : payload.error_code === 400 && /chat not found|bot was blocked|user is deactivated/.test(description)
+        ? "INVALID_CHAT"
+        : payload.error_code === 400
+          ? "HTTP_400"
+          : (payload.error_code ?? response.status) >= 500
+            ? "HTTP_5XX"
+            : "HTTP_400";
   return {
     ok: false,
     status: Number.isInteger(payload.error_code) ? payload.error_code! : response.status,
+    failureCode,
     retryAfterSeconds: Number.isFinite(payload.parameters?.retry_after) ? payload.parameters!.retry_after : undefined,
   };
 }

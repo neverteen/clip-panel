@@ -18,6 +18,12 @@ export function getMessageRateLimitError(
   return null;
 }
 
+export function getAttachmentRateLimitError(attachmentCount: number, requestedCount: number, limit: number) {
+  return attachmentCount + requestedCount > limit
+    ? `Достигнут дневной лимит: не более ${limit} изображений за сутки.`
+    : null;
+}
+
 export function countUnreadMessages(
   messages: Array<{ authorId: string; createdAt: Date }>,
   viewerId: string,

@@ -43,7 +43,10 @@ export default async function ModeratorSubmissionDetailPage({ params }: PageProp
     where: { submissionId: id },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: 50,
-    select: { id: true, text: true, createdAt: true, authorId: true, author: { select: { login: true } } },
+    select: {
+      id: true, text: true, createdAt: true, authorId: true, author: { select: { login: true } },
+      attachments: { select: { id: true, mime: true, sizeBytes: true, width: true, height: true, createdAt: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
+    },
   });
   const initialMessages = latestMessages.reverse();
   await advanceReadState(moderator.id, id, initialMessages.at(-1)?.createdAt ?? new Date());
@@ -71,7 +74,11 @@ export default async function ModeratorSubmissionDetailPage({ params }: PageProp
       </Card>
       <SubmissionChat
         initialEvents={initialEvents}
-        initialMessages={initialMessages.map((message) => ({ ...message, createdAt: message.createdAt.toISOString() }))}
+        initialMessages={initialMessages.map((message) => ({
+          ...message,
+          createdAt: message.createdAt.toISOString(),
+          attachments: message.attachments.map((attachment) => ({ ...attachment, createdAt: attachment.createdAt.toISOString() })),
+        }))}
         submissionId={submission.id}
         viewerId={moderator.id}
       />

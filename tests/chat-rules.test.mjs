@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Role } from "@prisma/client";
+import { ATTACHMENT_MAX_PER_USER_PER_DAY } from "../src/lib/config.ts";
 import {
   canAccessSubmissionChat,
   countUnreadMessages,
+  getAttachmentRateLimitError,
   getMessageRateLimitError,
 } from "../src/lib/chat-rules.ts";
 
@@ -13,6 +15,12 @@ test("chat access allows owner and moderator, but not another clipper or disable
   assert.equal(canAccessSubmissionChat(Role.MODERATOR, "mod", "owner"), true);
   assert.equal(canAccessSubmissionChat(Role.MODERATOR, "mod", "owner", false), false);
   assert.equal(canAccessSubmissionChat(Role.CLIPPER, "owner", "owner", false), false);
+});
+
+test("attachment daily quota allows the 40th item and rejects the 41st", () => {
+  const limit = ATTACHMENT_MAX_PER_USER_PER_DAY;
+  assert.equal(getAttachmentRateLimitError(limit - 1, 1, limit), null);
+  assert.match(getAttachmentRateLimitError(limit, 1, limit), new RegExp(`${limit} изображений`));
 });
 
 test("message rate limit boundaries are enforced", () => {

@@ -143,15 +143,32 @@ model Submission {
 }
 
 model Message {
-  id           String     @id @default(cuid())
+  id           String              @id @default(cuid())
   submissionId String
-  submission   Submission @relation(fields: [submissionId], references: [id])
+  submission   Submission          @relation(fields: [submissionId], references: [id])
   authorId     String
-  author       User       @relation(fields: [authorId], references: [id])
+  author       User                @relation(fields: [authorId], references: [id])
   text         String
-  createdAt    DateTime   @default(now())
+  attachments  MessageAttachment[]
+  createdAt    DateTime            @default(now())
 
+  @@index([authorId, createdAt])
   @@index([submissionId, createdAt, id])
+}
+
+model MessageAttachment {
+  id         String   @id @default(cuid())
+  messageId  String
+  message    Message  @relation(fields: [messageId], references: [id], onDelete: Restrict)
+  storageKey String   @unique
+  mime       String
+  sizeBytes  Int
+  width      Int
+  height     Int
+  createdAt  DateTime @default(now())
+
+  @@index([messageId, createdAt, id])
+  @@index([createdAt])
 }
 
 model SubmissionReadState {
@@ -262,6 +279,7 @@ model Notification {
   user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   kind            NotificationKind
   text            String
+  lastErrorCode   String?
   status          NotificationStatus @default(PENDING)
   attempts        Int                @default(0)
   nextAttemptAt   DateTime           @default(now())

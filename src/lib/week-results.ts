@@ -1,5 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { settleWeek } from "@/lib/settlement";
+import { settleWeek } from "./settlement.ts";
 
 type WeekReader = PrismaClient | Prisma.TransactionClient;
 

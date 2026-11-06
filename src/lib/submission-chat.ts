@@ -68,12 +68,22 @@ export async function getUnreadCounts(viewerId: string, role: Role) {
   return new Map(rows.map((row) => [row.id, row.unread]));
 }
 
+export type ChatAttachment = {
+  id: string;
+  mime: string;
+  sizeBytes: number;
+  width: number;
+  height: number;
+  createdAt: Date;
+};
+
 export type ChatMessage = {
   id: string;
   text: string;
   createdAt: Date;
   authorId: string;
   author: { login: string };
+  attachments: ChatAttachment[];
 };
 
 export type SystemChatEvent = {
