@@ -1,7 +1,7 @@
 import { Role } from "@prisma/client";
 import { requireModerator } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
-import { CreateUsersForm, UserControls } from "./users-form";
+import { CreateUsersForm, NewClipperForm, UserControls } from "./users-form";
 
 export const instant = false;
 
@@ -20,6 +20,12 @@ export default async function ModeratorUsersPage() {
           Создавайте аккаунты нарезчиков и управляйте доступом.
         </p>
       </header>
+
+      <section className="space-y-4 rounded-lg border border-border p-5">
+        <h2 className="text-xl font-medium">Новый нарезчик</h2>
+        <p className="text-sm text-muted">Каналы из списка будут добавлены сразу со статусом «Одобрен».</p>
+        <NewClipperForm />
+      </section>
 
       <section className="space-y-4 rounded-lg border border-border p-5">
         <h2 className="text-xl font-medium">Создать пользователей</h2>
@@ -60,6 +66,7 @@ export default async function ModeratorUsersPage() {
                   <td className="px-4 py-3" data-label="Действия">
                     <UserControls
                       isActive={user.isActive}
+                      isClipper={user.role === Role.CLIPPER}
                       userId={user.id}
                     />
                   </td>

@@ -11,6 +11,9 @@ export const authConfig = {
       if (user) {
         token.role = user.role as Role;
         if ("login" in user && typeof user.login === "string") token.login = user.login;
+        if ("passwordChangedAt" in user && typeof user.passwordChangedAt === "number") {
+          token.passwordChangedAt = user.passwordChangedAt;
+        }
       }
       return token;
     },
@@ -19,6 +22,7 @@ export const authConfig = {
         session.user.id = token.sub;
         session.user.login = typeof token.login === "string" ? token.login : session.user.name ?? "";
         session.user.role = token.role as Role;
+        session.user.passwordChangedAt = typeof token.passwordChangedAt === "number" ? token.passwordChangedAt : 0;
       }
       return session;
     },

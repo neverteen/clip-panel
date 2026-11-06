@@ -1,11 +1,14 @@
 "use server";
 
 import bcrypt from "bcryptjs";
-import { Prisma } from "@prisma/client";
+import { AccountStatus, Platform, Prisma, Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireModerator } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
+import { parseModeratorChannels, type ChannelLineError } from "@/lib/moderator-channels";
+import { MAX_ACCOUNTS_PER_PLATFORM } from "@/lib/config";
+import { nextPasswordVersion } from "@/lib/password-version";
 
 const loginPattern = /^[a-z0-9_.-]{3,32}$/;
 const passwordSchema = z
@@ -41,6 +44,172 @@ export type ActionState = {
   message?: string;
   error?: string;
 };
+
+export type ClipChannelState = {
+  login?: string;
+  links?: string;
+  created?: boolean;
+  error?: string;
+  field?: "login" | "channels";
+  lineErrors?: ChannelLineError[];
+};
+
+const clipperCreateSchema = z.object({
+  login: z.string().trim().toLowerCase().regex(loginPattern, "Логин: 3–32 символа, только a-z, 0-9, _, точка и дефис."),
+  password: passwordSchema,
+});
+
+function isUniqueViolation(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
+async function channelConflictReport(channels: Array<{ line: number; platform: Platform; url: string }>) {
+  const issues: ChannelLineError[] = [];
+  for (const channel of channels) {
+    const existing = await prisma.platformAccount.findUnique({
+      where: { platform_url: { platform: channel.platform, url: channel.url } },
+      select: { user: { select: { login: true } } },
+    });
+    if (existing) issues.push({ line: channel.line, reason: `Ссылка уже занята пользователем ${existing.user.login}.` });
+  }
+  return issues;
+}
+
+export async function createClipperWithChannelsAction(
+  _previousState: ClipChannelState,
+  formData: FormData,
+): Promise<ClipChannelState> {
+  const moderator = await requireModerator();
+  const rawLogin = formData.get("login");
+  const rawPassword = formData.get("password");
+  const rawLinks = formData.get("links");
+  const login = typeof rawLogin === "string" ? rawLogin.trim().toLowerCase() : "";
+  const links = typeof rawLinks === "string" ? rawLinks : "";
+  const credentials = clipperCreateSchema.safeParse({ login: rawLogin, password: rawPassword });
+  if (!credentials.success) {
+    const loginIssue = credentials.error.issues.find((issue) => issue.path[0] === "login");
+    return { login, links, field: loginIssue ? "login" : undefined, error: loginIssue?.message ?? credentials.error.issues[0]?.message };
+  }
+  if (typeof rawPassword !== "string") return { login, links, field: "login", error: "Проверьте данные пользователя." };
+  const parsedChannels = parseModeratorChannels(links);
+  if (parsedChannels.errors.length) return { login, links, field: "channels", lineErrors: parsedChannels.errors };
+
+  const passwordHash = await bcrypt.hash(credentials.data.password, 12);
+  try {
+    await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: { login: credentials.data.login, password: passwordHash, role: Role.CLIPPER },
+        select: { id: true },
+      });
+      for (const channel of parsedChannels.channels) {
+        await tx.platformAccount.create({
+          data: {
+            userId: user.id,
+            addedById: moderator.id,
+            platform: channel.platform,
+            url: channel.url,
+            status: AccountStatus.APPROVED,
+            approvedAt: new Date(),
+          },
+          select: { id: true },
+        });
+      }
+    });
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      const userExists = await prisma.user.findUnique({ where: { login }, select: { id: true } });
+      if (userExists) return { login, links, field: "login", error: "Пользователь с таким логином уже существует." };
+      return { login, links, field: "channels", lineErrors: await channelConflictReport(parsedChannels.channels) };
+    }
+    throw error;
+  }
+  revalidatePath("/moderator/users");
+  revalidatePath("/moderator/accounts");
+  return { created: true, login: credentials.data.login };
+}
+
+export async function addChannelsToClipperAction(
+  userId: string,
+  _previousState: ClipChannelState,
+  formData: FormData,
+): Promise<ClipChannelState> {
+  const moderator = await requireModerator();
+  const rawLinks = formData.get("links");
+  const links = typeof rawLinks === "string" ? rawLinks : "";
+  const parsedChannels = parseModeratorChannels(links);
+  if (parsedChannels.errors.length) return { links, field: "channels", lineErrors: parsedChannels.errors };
+
+  try {
+    const errors = await prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`;
+      if (!locked.length) return [{ line: 0, reason: "Пользователь не найден." }];
+      const target = await tx.user.findUnique({ where: { id: userId }, select: { id: true, role: true, isActive: true } });
+      if (!target || target.role !== Role.CLIPPER) return [{ line: 0, reason: "Каналы можно добавлять только нарезчику." }];
+
+      const counts = new Map<Platform, number>();
+      for (const platform of [Platform.TIKTOK, Platform.YOUTUBE, Platform.INSTAGRAM]) {
+        counts.set(platform, await tx.platformAccount.count({
+          where: { userId, platform, status: { in: [AccountStatus.PENDING, AccountStatus.APPROVED] } },
+        }));
+      }
+      const prepared: Array<{ channel: (typeof parsedChannels.channels)[number]; rejectedId?: string }> = [];
+      const lineErrors: ChannelLineError[] = [];
+      for (const channel of parsedChannels.channels) {
+        const existing = await tx.platformAccount.findUnique({
+          where: { platform_url: { platform: channel.platform, url: channel.url } },
+          select: { id: true, userId: true, status: true, user: { select: { login: true } } },
+        });
+        if (existing && existing.userId !== userId) {
+          lineErrors.push({ line: channel.line, reason: `Ссылка уже занята пользователем ${existing.user.login}.` });
+          continue;
+        }
+        if (existing && existing.status !== AccountStatus.REJECTED) {
+          lineErrors.push({ line: channel.line, reason: "Этот аккаунт уже добавлен." });
+          continue;
+        }
+        if (existing?.status === AccountStatus.REJECTED) {
+          counts.set(channel.platform, counts.get(channel.platform)! + 1);
+          prepared.push({ channel, rejectedId: existing.id });
+          continue;
+        }
+        counts.set(channel.platform, counts.get(channel.platform)! + 1);
+        prepared.push({ channel });
+      }
+      for (const [platform, count] of counts) {
+        if (count > MAX_ACCOUNTS_PER_PLATFORM) {
+          for (const item of prepared.filter(({ channel }) => channel.platform === platform)) {
+            lineErrors.push({ line: item.channel.line, reason: `Превышен лимит: максимум ${MAX_ACCOUNTS_PER_PLATFORM} аккаунтов этой платформы.` });
+          }
+        }
+      }
+      if (lineErrors.length) return lineErrors;
+      const now = new Date();
+      for (const { channel, rejectedId } of prepared) {
+        if (rejectedId) {
+          await tx.platformAccount.update({
+            where: { id: rejectedId },
+            data: { status: AccountStatus.APPROVED, approvedAt: now, addedById: moderator.id },
+            select: { id: true },
+          });
+        } else {
+          await tx.platformAccount.create({
+            data: { userId, addedById: moderator.id, platform: channel.platform, url: channel.url, status: AccountStatus.APPROVED, approvedAt: now },
+            select: { id: true },
+          });
+        }
+      }
+      return [];
+    });
+    if (errors.length) return { links, field: "channels", lineErrors: errors };
+  } catch (error) {
+    if (isUniqueViolation(error)) return { links, field: "channels", lineErrors: await channelConflictReport(parsedChannels.channels) };
+    throw error;
+  }
+  revalidatePath("/moderator/users");
+  revalidatePath("/moderator/accounts");
+  revalidatePath("/accounts");
+  return { created: true };
+}
 
 export async function createUsersAction(
   _previousState: BatchState,
@@ -185,14 +354,20 @@ export async function resetPasswordAction(
   }
 
   try {
-    await prisma.$transaction(async (tx) => {
-      const user = await tx.user.update({
+    const reset = await prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`;
+      if (!locked.length) return false;
+      const current = await tx.user.findUnique({ where: { id: userId }, select: { login: true, passwordChangedAt: true } });
+      if (!current) return false;
+      await tx.user.update({
         where: { id: userId },
-        data: { password: await bcrypt.hash(parsedPassword.data, 12) },
-        select: { login: true },
+        data: { password: await bcrypt.hash(parsedPassword.data, 12), passwordChangedAt: nextPasswordVersion(current.passwordChangedAt) },
+        select: { id: true },
       });
-      await tx.loginAttempt.deleteMany({ where: { login: user.login } });
+      await tx.loginAttempt.deleteMany({ where: { login: current.login } });
+      return true;
     });
+    if (!reset) return { error: "Пользователь не найден." };
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&

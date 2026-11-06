@@ -79,9 +79,11 @@ model User {
   isActive                     Boolean               @default(true)
   wallet                       String?
   steamTradeUrl                String?
+  passwordChangedAt            DateTime?
   telegramChatId               String?               @unique
   telegramNotificationsEnabled Boolean               @default(true)
-  accounts                     PlatformAccount[]
+  accounts                     PlatformAccount[]     @relation("PlatformAccountOwner")
+  accountsAdded                PlatformAccount[]     @relation("PlatformAccountAddedBy")
   submissions                  Submission[]
   messages                     Message[]
   readStates                   SubmissionReadState[]
@@ -105,13 +107,17 @@ model LoginAttempt {
 model PlatformAccount {
   id          String        @id @default(cuid())
   userId      String
-  user        User          @relation(fields: [userId], references: [id])
+  user        User          @relation("PlatformAccountOwner", fields: [userId], references: [id])
+  addedById   String?
+  addedBy     User?         @relation("PlatformAccountAddedBy", fields: [addedById], references: [id], onDelete: Restrict)
+  approvedAt  DateTime?
   platform    Platform
   url         String
   status      AccountStatus @default(PENDING)
   submissions Submission[]
 
   @@unique([platform, url])
+  @@index([addedById])
 }
 
 model Submission {

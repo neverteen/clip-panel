@@ -142,11 +142,6 @@ export function LandingPage({
                   <BulletList items={rules.general.map((item) => fill(item, values))} />
                 </Card>
 
-                <Card className="space-y-4">
-                  <h3 className="font-heading text-lg font-semibold text-text">{rules.accountChangeTitle}</h3>
-                  <p className="text-sm leading-6 text-muted">{rules.accountChangeIntro}</p>
-                  <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-background p-4 font-sans text-sm leading-6 text-text">{rules.accountChangeTemplate}</pre>
-                </Card>
 
                 <Card className="space-y-4">
                   <h3 className="font-heading text-lg font-semibold text-text">{rules.profileTitle}</h3>

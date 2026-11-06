@@ -7,6 +7,7 @@ import {
   setTelegramNotificationsAction,
   unlinkTelegramAction,
   updatePayoutProfileAction,
+  changePasswordAction,
   type ProfileActionState,
 } from "./actions";
 
@@ -18,12 +19,16 @@ export function ProfileForm({
   steamTradeUrl,
   telegramConnected,
   telegramNotificationsEnabled,
+  showPasswordChange,
+  passwordError,
 }: {
   showPayoutDetails: boolean;
   wallet: string;
   steamTradeUrl: string;
   telegramConnected: boolean;
   telegramNotificationsEnabled: boolean;
+  showPasswordChange: boolean;
+  passwordError?: string;
 }) {
   const [state, action, pending] = useActionState(updatePayoutProfileAction, initialState);
   const [telegramLink, setTelegramLink] = useState<string | null>(null);
@@ -75,6 +80,16 @@ export function ProfileForm({
           </form>
         </>
       )}
+      {showPasswordChange && <section className="space-y-3 border-t border-[var(--border)] pt-5">
+        <h2 className="font-semibold">Сменить пароль</h2>
+        {passwordError && <p className="text-sm text-danger" role="alert">{passwordError}</p>}
+        <form action={changePasswordAction} className="space-y-3">
+          <label className="block space-y-1 text-sm"><span>Текущий пароль</span><Input autoComplete="current-password" name="currentPassword" required type="password" /></label>
+          <label className="block space-y-1 text-sm"><span>Новый пароль</span><Input autoComplete="new-password" maxLength={72} minLength={8} name="newPassword" required type="password" /></label>
+          <label className="block space-y-1 text-sm"><span>Повторите новый пароль</span><Input autoComplete="new-password" maxLength={72} minLength={8} name="confirmPassword" required type="password" /></label>
+          <Button type="submit">Изменить пароль</Button>
+        </form>
+      </section>}
       <section className="space-y-3 border-t border-[var(--border)] pt-5">
         <h2 className="font-semibold">Telegram</h2>
         <p className="text-sm text-[var(--muted-foreground)]">

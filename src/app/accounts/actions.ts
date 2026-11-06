@@ -9,85 +9,7 @@ import { requireClipper, requireModerator } from "@/lib/auth-guards";
 import { getAccountWindow, getAccountWindowNow, isAccountWindowOpen } from "@/lib/account-window";
 import { prisma } from "@/lib/prisma";
 import { enqueueModeratorNotifications, enqueueUserNotification } from "@/lib/telegram-notifications";
-
-const PLATFORM_HOSTS = {
-  TIKTOK: "tiktok.com",
-  YOUTUBE: "youtube.com",
-  INSTAGRAM: "instagram.com",
-} as const;
-
-type NormalizedUrl = { url: string } | { error: string };
-
-function normalizeProfileUrl(platform: Platform, input: string): NormalizedUrl {
-  let url: URL;
-  try {
-    const candidate = /^[a-z][a-z\d+.-]*:\/\//i.test(input)
-      ? input
-      : `https://${input}`;
-    url = new URL(candidate);
-  } catch {
-    return { error: "Введите корректную ссылку на профиль или канал." };
-  }
-
-  if (
-    (url.protocol !== "https:" && url.protocol !== "http:") ||
-    url.username ||
-    url.password ||
-    (url.port !== "" && url.port !== "80" && url.port !== "443")
-  ) {
-    return { error: "Ссылка должна вести на официальный профиль или канал." };
-  }
-
-  const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
-  const expectedHost = PLATFORM_HOSTS[platform];
-  if (hostname !== expectedHost) {
-    if (platform === Platform.YOUTUBE && hostname === "youtu.be") {
-      return { error: "Короткие ссылки youtu.be на видео не принимаются. Укажите ссылку на канал." };
-    }
-    if (platform === Platform.TIKTOK && hostname.endsWith(".tiktok.com")) {
-      return { error: "Сокращённые ссылки TikTok не принимаются. Укажите tiktok.com/@имя." };
-    }
-    return {
-      error: `Для ${platform === Platform.TIKTOK ? "TikTok" : platform === Platform.YOUTUBE ? "YouTube" : "Instagram"} укажите ссылку с домена ${expectedHost}.`,
-    };
-  }
-
-  const path = url.pathname.replace(/\/+$/, "") || "/";
-  if (platform === Platform.TIKTOK) {
-    if (!/^\/@[a-z\d._]+$/i.test(path)) {
-      return { error: "Нужна ссылка на профиль TikTok вида tiktok.com/@имя. Ссылки на видео не принимаются." };
-    }
-    url.pathname = path.toLowerCase();
-  } else if (platform === Platform.YOUTUBE) {
-    if (/^\/(watch|shorts|embed|live|playlist|v)(\/|$)/i.test(path)) {
-      return { error: "Нужна ссылка на канал YouTube вида youtube.com/@имя или /channel/ID, не на видео." };
-    }
-    if (!/^\/@[a-z\d._-]+$/i.test(path) && !/^\/channel\/[a-z\d_-]+$/i.test(path)) {
-      return { error: "Укажите канал YouTube в формате youtube.com/@имя или youtube.com/channel/ID." };
-    }
-    if (path.startsWith("/@")) url.pathname = path.toLowerCase();
-    else url.pathname = path;
-  } else {
-    const username = path.slice(1);
-    const reservedPaths = new Set([
-      "about", "accounts", "direct", "explore", "p", "reel", "reels", "stories",
-    ]);
-    if (
-      !/^\/[a-z\d._]+$/i.test(path) ||
-      reservedPaths.has(username.toLowerCase())
-    ) {
-      return { error: "Нужна ссылка на профиль Instagram вида instagram.com/имя, не на публикацию или reel." };
-    }
-    url.pathname = path.toLowerCase();
-  }
-
-  url.protocol = "https:";
-  url.hostname = hostname;
-  url.port = "";
-  url.search = "";
-  url.hash = "";
-  return { url: url.toString().replace(/\/$/, "") };
-}
+import { normalizeProfileUrl } from "@/lib/account-url";
 
 const accountInputSchema = z
   .object({
@@ -175,6 +97,7 @@ export async function addPlatformAccountAction(
       const used = await tx.platformAccount.count({
         where: {
           userId: owner.id,
+          addedById: owner.id,
           platform: parsed.data.platform,
           status: { in: [AccountStatus.PENDING, AccountStatus.APPROVED] },
         },
@@ -256,7 +179,10 @@ export async function decidePlatformAccountAction(
     if (!account || account.status !== AccountStatus.PENDING) return false;
     const updated = await tx.platformAccount.updateMany({
       where: { id: account.id, status: AccountStatus.PENDING },
-      data: { status: input.data.decision },
+      data: {
+        status: input.data.decision,
+        ...(input.data.decision === AccountStatus.APPROVED ? { approvedAt: new Date() } : {}),
+      },
     });
     if (updated.count === 0) return false;
     const kind = input.data.decision === AccountStatus.APPROVED ? "ACCOUNT_APPROVED" : "ACCOUNT_REJECTED";

@@ -9,8 +9,17 @@ import { ProfileForm } from "./profile-form";
 
 export const instant = false;
 
-export default async function ProfilePage() {
+const passwordErrors: Record<string, string> = {
+  invalid: "Проверьте новый пароль: не менее 8 символов и не более 72 байт в UTF-8.",
+  mismatch: "Новые пароли не совпадают.",
+  locked: "Слишком много неверных попыток. Попробуйте позже.",
+  incorrect: "Текущий пароль неверен.",
+  same: "Новый пароль должен отличаться от текущего.",
+};
+
+export default async function ProfilePage({ searchParams }: PageProps<"/profile">) {
   const user = await requireUser();
+  const params = await searchParams;
   const sections = getProfileSections(user.role);
   const profile = await prisma.user.findUnique({
     where: { id: user.id },
@@ -30,6 +39,8 @@ export default async function ProfilePage() {
         steamTradeUrl={payoutProfile?.steamTradeUrl ?? ""}
         telegramConnected={Boolean(profile?.telegramChatId)}
         telegramNotificationsEnabled={profile?.telegramNotificationsEnabled ?? true}
+        showPasswordChange={user.role === Role.CLIPPER}
+        passwordError={typeof params.passwordError === "string" ? passwordErrors[params.passwordError] : undefined}
       />
       {sections.payoutDetails && (
         <Card className="text-sm text-[var(--muted-foreground)]">

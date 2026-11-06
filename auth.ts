@@ -5,6 +5,7 @@ import { z } from "zod";
 import { Role } from "@prisma/client";
 import { authConfig } from "./auth.config";
 import { prisma } from "./src/lib/prisma";
+import { clearLoginAttempts, isLoginBlocked, recordFailedLogin } from "./src/lib/login-attempts";
 
 const loginSchema = z.string().trim().toLowerCase().min(1).max(320);
 const passwordSchema = z
@@ -12,42 +13,10 @@ const passwordSchema = z
   .min(8)
   .refine((password) => Buffer.byteLength(password, "utf8") <= 72);
 
-const MAX_FAILED_ATTEMPTS = 5;
-const LOCK_DURATION_MS = 10 * 60 * 1000;
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync(
   "not-a-valid-clip-panel-password",
   12,
 );
-
-async function recordFailedLogin(login: string) {
-  const now = new Date();
-  const lockedUntil = new Date(now.getTime() + LOCK_DURATION_MS);
-
-  await prisma.$executeRaw`
-    INSERT INTO "LoginAttempt" ("login", "failedAttempts", "lockedUntil", "updatedAt")
-    VALUES (${login}, 1, NULL, ${now})
-    ON CONFLICT ("login") DO UPDATE SET
-      "failedAttempts" = CASE
-        WHEN "LoginAttempt"."lockedUntil" > ${now}
-          THEN "LoginAttempt"."failedAttempts"
-        WHEN "LoginAttempt"."lockedUntil" IS NOT NULL
-          AND "LoginAttempt"."lockedUntil" <= ${now}
-          THEN 1
-        ELSE "LoginAttempt"."failedAttempts" + 1
-      END,
-      "lockedUntil" = CASE
-        WHEN "LoginAttempt"."lockedUntil" > ${now}
-          THEN "LoginAttempt"."lockedUntil"
-        WHEN "LoginAttempt"."lockedUntil" IS NOT NULL
-          AND "LoginAttempt"."lockedUntil" <= ${now}
-          THEN NULL
-        WHEN "LoginAttempt"."failedAttempts" + 1 >= ${MAX_FAILED_ATTEMPTS}
-          THEN ${lockedUntil}
-        ELSE "LoginAttempt"."lockedUntil"
-      END,
-      "updatedAt" = ${now}
-  `;
-}
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
@@ -66,10 +35,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           where: { login },
         });
 
-        const attempt = await prisma.loginAttempt.findUnique({
-          where: { login },
-        });
-        if (attempt?.lockedUntil && attempt.lockedUntil > new Date()) return null;
+        if (await isLoginBlocked(login)) return null;
 
         const parsedPassword = passwordSchema.safeParse(input?.password);
         if (!parsedPassword.success || !user || !user.isActive) {
@@ -90,7 +56,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null;
         }
 
-        await prisma.loginAttempt.deleteMany({ where: { login } });
+        await clearLoginAttempts(login);
 
         return {
           id: user.id,
@@ -98,6 +64,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           email: null,
           name: user.login,
           role: user.role ?? Role.CLIPPER,
+          passwordChangedAt: user.passwordChangedAt?.getTime() ?? 0,
         };
       },
     }),

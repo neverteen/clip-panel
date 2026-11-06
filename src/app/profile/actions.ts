@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireClipper, requireUser } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
@@ -10,9 +11,16 @@ import { createTelegramLinkCode, TelegramLinkError, unlinkTelegram } from "@/lib
 import { makeTelegramDeepLink } from "@/lib/telegram-rules";
 import { getTelegramConfig } from "@/lib/telegram-api";
 import { getNow } from "@/lib/now";
+import bcrypt from "bcryptjs";
+import { signOut } from "../../../auth";
+import { clearLoginAttempts, isLoginBlocked, recordFailedLogin } from "@/lib/login-attempts";
+import { nextPasswordVersion } from "@/lib/password-version";
 
 export type ProfileActionState = { error?: string; message?: string };
 export type TelegramLinkActionState = { error?: string; link?: string; expiresAt?: string };
+
+const passwordSchema = z.string().min(8, "Пароль должен содержать не менее 8 символов.")
+  .refine((password) => Buffer.byteLength(password, "utf8") <= 72, "Пароль слишком длинный: максимум 72 байта в UTF-8.");
 
 const profileSchema = z.object({
   wallet: z.string().trim().max(200, "Кошелёк должен быть не длиннее 200 символов.").transform((value) => value || null),
@@ -50,6 +58,51 @@ export async function updatePayoutProfileAction(
   revalidatePath("/profile");
   revalidatePath("/balance");
   return { message: "Реквизиты сохранены." };
+}
+
+export async function changePasswordAction(formData: FormData): Promise<void> {
+  const user = await requireClipper();
+  const currentPassword = formData.get("currentPassword");
+  const parsed = z.object({
+    currentPassword: z.string().min(1),
+    newPassword: passwordSchema,
+    confirmPassword: z.string().min(1),
+  }).safeParse({
+    currentPassword,
+    newPassword: formData.get("newPassword"),
+    confirmPassword: formData.get("confirmPassword"),
+  });
+  if (!parsed.success) redirect("/profile?passwordError=invalid");
+  if (parsed.data.newPassword !== parsed.data.confirmPassword) redirect("/profile?passwordError=mismatch");
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "User" WHERE "id" = ${user.id} FOR UPDATE`;
+    const current = await tx.user.findUnique({
+      where: { id: user.id },
+      select: { password: true, passwordChangedAt: true, isActive: true, role: true },
+    });
+    if (!current?.isActive || current.role !== "CLIPPER") return "account_changed" as const;
+    if (await isLoginBlocked(user.login, tx)) return "locked" as const;
+    if (typeof currentPassword !== "string" || !(await bcrypt.compare(currentPassword, current.password))) {
+      await recordFailedLogin(user.login, tx);
+      return "incorrect" as const;
+    }
+    if (await bcrypt.compare(parsed.data.newPassword, current.password)) return "same" as const;
+    await tx.user.update({
+      where: { id: user.id },
+      data: {
+        password: await bcrypt.hash(parsed.data.newPassword, 12),
+        passwordChangedAt: nextPasswordVersion(current.passwordChangedAt),
+      },
+      select: { id: true },
+    });
+    await clearLoginAttempts(user.login, tx);
+    return "changed" as const;
+  });
+  if (result === "locked") redirect("/profile?passwordError=locked");
+  if (result === "incorrect") redirect("/profile?passwordError=incorrect");
+  if (result === "same") redirect("/profile?passwordError=same");
+  if (result !== "changed") redirect("/login");
+  await signOut({ redirectTo: "/login?passwordChanged=1" });
 }
 
 function telegramError(code: string) {
