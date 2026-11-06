@@ -1,14 +1,14 @@
 "use server";
 
 import bcrypt from "bcryptjs";
-import { AccountStatus, Platform, Prisma, Role } from "@prisma/client";
+import { Platform, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireModerator } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
 import { parseModeratorChannels, type ChannelLineError } from "@/lib/moderator-channels";
-import { MAX_ACCOUNTS_PER_PLATFORM } from "@/lib/config";
 import { nextPasswordVersion } from "@/lib/password-version";
+import { addApprovedChannelsToClipper, createClipperBundle } from "@/lib/moderator-channel-operations";
 
 const loginPattern = /^[a-z0-9_.-]{3,32}$/;
 const passwordSchema = z
@@ -96,25 +96,12 @@ export async function createClipperWithChannelsAction(
 
   const passwordHash = await bcrypt.hash(credentials.data.password, 12);
   try {
-    await prisma.$transaction(async (tx) => {
-      const user = await tx.user.create({
-        data: { login: credentials.data.login, password: passwordHash, role: Role.CLIPPER },
-        select: { id: true },
-      });
-      for (const channel of parsedChannels.channels) {
-        await tx.platformAccount.create({
-          data: {
-            userId: user.id,
-            addedById: moderator.id,
-            platform: channel.platform,
-            url: channel.url,
-            status: AccountStatus.APPROVED,
-            approvedAt: new Date(),
-          },
-          select: { id: true },
-        });
-      }
-    });
+    await prisma.$transaction((tx) => createClipperBundle(tx, {
+      login: credentials.data.login,
+      passwordHash,
+      addedById: moderator.id,
+      channels: parsedChannels.channels,
+    }));
   } catch (error) {
     if (isUniqueViolation(error)) {
       const userExists = await prisma.user.findUnique({ where: { login }, select: { id: true } });
@@ -140,66 +127,11 @@ export async function addChannelsToClipperAction(
   if (parsedChannels.errors.length) return { links, field: "channels", lineErrors: parsedChannels.errors };
 
   try {
-    const errors = await prisma.$transaction(async (tx) => {
-      const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`;
-      if (!locked.length) return [{ line: 0, reason: "Пользователь не найден." }];
-      const target = await tx.user.findUnique({ where: { id: userId }, select: { id: true, role: true, isActive: true } });
-      if (!target || target.role !== Role.CLIPPER) return [{ line: 0, reason: "Каналы можно добавлять только нарезчику." }];
-
-      const counts = new Map<Platform, number>();
-      for (const platform of [Platform.TIKTOK, Platform.YOUTUBE, Platform.INSTAGRAM]) {
-        counts.set(platform, await tx.platformAccount.count({
-          where: { userId, platform, status: { in: [AccountStatus.PENDING, AccountStatus.APPROVED] } },
-        }));
-      }
-      const prepared: Array<{ channel: (typeof parsedChannels.channels)[number]; rejectedId?: string }> = [];
-      const lineErrors: ChannelLineError[] = [];
-      for (const channel of parsedChannels.channels) {
-        const existing = await tx.platformAccount.findUnique({
-          where: { platform_url: { platform: channel.platform, url: channel.url } },
-          select: { id: true, userId: true, status: true, user: { select: { login: true } } },
-        });
-        if (existing && existing.userId !== userId) {
-          lineErrors.push({ line: channel.line, reason: `Ссылка уже занята пользователем ${existing.user.login}.` });
-          continue;
-        }
-        if (existing && existing.status !== AccountStatus.REJECTED) {
-          lineErrors.push({ line: channel.line, reason: "Этот аккаунт уже добавлен." });
-          continue;
-        }
-        if (existing?.status === AccountStatus.REJECTED) {
-          counts.set(channel.platform, counts.get(channel.platform)! + 1);
-          prepared.push({ channel, rejectedId: existing.id });
-          continue;
-        }
-        counts.set(channel.platform, counts.get(channel.platform)! + 1);
-        prepared.push({ channel });
-      }
-      for (const [platform, count] of counts) {
-        if (count > MAX_ACCOUNTS_PER_PLATFORM) {
-          for (const item of prepared.filter(({ channel }) => channel.platform === platform)) {
-            lineErrors.push({ line: item.channel.line, reason: `Превышен лимит: максимум ${MAX_ACCOUNTS_PER_PLATFORM} аккаунтов этой платформы.` });
-          }
-        }
-      }
-      if (lineErrors.length) return lineErrors;
-      const now = new Date();
-      for (const { channel, rejectedId } of prepared) {
-        if (rejectedId) {
-          await tx.platformAccount.update({
-            where: { id: rejectedId },
-            data: { status: AccountStatus.APPROVED, approvedAt: now, addedById: moderator.id },
-            select: { id: true },
-          });
-        } else {
-          await tx.platformAccount.create({
-            data: { userId, addedById: moderator.id, platform: channel.platform, url: channel.url, status: AccountStatus.APPROVED, approvedAt: now },
-            select: { id: true },
-          });
-        }
-      }
-      return [];
-    });
+    const errors = await prisma.$transaction((tx) => addApprovedChannelsToClipper(tx, {
+      userId,
+      moderatorId: moderator.id,
+      channels: parsedChannels.channels,
+    }));
     if (errors.length) return { links, field: "channels", lineErrors: errors };
   } catch (error) {
     if (isUniqueViolation(error)) return { links, field: "channels", lineErrors: await channelConflictReport(parsedChannels.channels) };
